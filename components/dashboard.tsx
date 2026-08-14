@@ -295,27 +295,10 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   }
 
   async function recordPayment(customer: DashboardCustomer, amount: number, note: string) {
-    if (!supabase || !liveMode) return null;
-    const { data: debts, error: debtError } = await supabase.from("debts").select("id, principal, payments(amount)").eq("customer_id", customer.id).eq("status", "open").order("created_at", { ascending: true });
-    if (debtError) return "Qarzlar olinmadi. Qayta urinib ko'ring.";
-
-    let left = amount;
-    for (const debt of (debts ?? []) as Array<{ id: string; principal: number; payments: Array<{ amount: number }> }>) {
-      if (left <= 0) break;
-      const paid = debt.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
-      const open = Math.max(Number(debt.principal) - paid, 0);
-      const part = Math.min(left, open);
-      if (part > 0) {
-        const { error: paymentError } = await supabase.from("payments").insert({ customer_id: customer.id, debt_id: debt.id, amount: part, note: note.trim() || null });
-        if (paymentError) return "To'lov yozilmadi. Qayta urinib ko'ring.";
-        if (part >= open) {
-          const { error: closeError } = await supabase.from("debts").update({ status: "paid" }).eq("id", debt.id);
-          if (closeError) return "Qarz holati yangilanmadi.";
-        }
-        left -= part;
-      }
-    }
-    return left > 0 ? "To'lov to'liq taqsimlanmadi." : null;
+    if (!liveMode) return null;
+    const response = await fetch(`/api/customers/${customer.id}/payments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount, note: note.trim() || null }) });
+    const payload = await response.json().catch(() => null) as { error?: string } | null;
+    return response.ok ? null : payload?.error || "To'lov yozilmadi. Qayta urinib ko'ring.";
   }
 
   function applyCredit(customer: DashboardCustomer, amount: number, dueDate: string | null) {
