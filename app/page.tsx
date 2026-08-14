@@ -39,9 +39,14 @@ export default async function Home() {
     const status = balance === 0 ? "paid" : dueDate && new Date(dueDate) < new Date() ? "overdue" : "on-track";
     return { id: customer.id, name: customer.name, phone: customer.phone ?? "Telefon yo'q", balance, dueDate, status, lastPayment };
   });
+  const monthPrefix = new Date().toISOString().slice(0, 7);
+  const collectedThisMonth = (data ?? []).reduce((sum, customer) => {
+    const debts = (customer.debts ?? []) as Array<{ payments: Array<{ amount: number; paid_at: string | null }> }>;
+    return sum + debts.flatMap((debt) => debt.payments).filter((payment) => payment.paid_at?.slice(0, 7) === monthPrefix).reduce((paymentSum, payment) => paymentSum + Number(payment.amount), 0);
+  }, 0);
   const stats: DashboardStats = {
     totalOutstanding: customers.reduce((sum, customer) => sum + customer.balance, 0),
-    collectedThisMonth: 0,
+    collectedThisMonth,
     overdueAmount: customers.filter((customer) => customer.status === "overdue").reduce((sum, customer) => sum + customer.balance, 0),
     activeCustomers: customers.filter((customer) => customer.balance > 0).length,
   };
