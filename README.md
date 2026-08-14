@@ -20,6 +20,8 @@ npm run dev
 
 Add the Supabase URL and publishable key to `.env.local`. Run [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL Editor before using live data.
 
+For an existing database, apply the files in [`supabase/migrations`](./supabase/migrations) after the base schema. Review and test each migration before applying it to production.
+
 ## Security
 
 Row Level Security is enabled for every application table. The browser only uses the public Supabase publishable key. Never commit a secret key, database password, or service-role credential. Add production environment variables in Vercel's project settings.
