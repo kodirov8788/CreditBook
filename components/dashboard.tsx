@@ -492,7 +492,7 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
 
           <section className="content-grid">
             <div className="panel customers-panel" id="customers">
-              <div className="panel-heading"><div><div className="panel-title">Mijozlar</div><div className="panel-subtitle">Qoldig'i bor mijozlar</div></div><button className="button button-secondary panel-add" onClick={openAddCustomer}><Plus size={17} />Mijoz</button></div>
+              <div className="panel-heading"><div><div className="panel-title">Mijozlar</div><div className="panel-subtitle">Barcha mijozlar</div></div><button className="button button-secondary panel-add" onClick={openAddCustomer}><Plus size={17} />Mijoz</button></div>
               <div className="search-wrap"><div className="search-box"><Search size={17} aria-hidden="true" /><input className="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Mijoz qidirish..." aria-label="Mijoz qidirish" /></div></div>
               <div className="customer-list">{filteredCustomers.length ? filteredCustomers.map((customer) => <CustomerRow customer={customer} key={customer.id} onAction={openQuickAction} onOpen={() => openCustomerDetails(customer)} />) : <div className="empty"><Users size={28} /><strong>Mijoz topilmadi.</strong><span>Boshqa ism yoki telefon bilan qidiring.</span><button className="button button-secondary" onClick={openAddCustomer}><Plus size={16} />Mijoz qo'shish</button></div>}</div>
             </div>
