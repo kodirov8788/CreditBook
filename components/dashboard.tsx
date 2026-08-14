@@ -36,6 +36,7 @@ type HistoryFilter = "all" | "credit" | "payment";
 type HistoryCredit = { id: string; title: string | null; principal: number; due_date: string | null; status: string; created_at: string };
 type HistoryPayment = { id: string; debt_id: string; amount: number; paid_at: string | null; note: string | null; created_at: string };
 type HistoryTransaction = { id: string; type: "credit" | "payment"; amount: number; description: string; occurredAt: string; dueDate: string | null; status: string | null; balanceAfter: number };
+type ActivityItem = { id: string; customer_id: string | null; event_type: string; description: string; created_at: string };
 type Notice = { tone: "success" | "info"; text: string } | null;
 
 function formatMoney(value: number) {
@@ -78,9 +79,10 @@ function initials(value: string) {
   return value.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 }
 
-export default function Dashboard({ initialCustomers, initialStats, userEmail, shopName = "Mahalla do'koni", liveMode, initialError = "" }: { initialCustomers: DashboardCustomer[]; initialStats: DashboardStats; userEmail: string | null; shopName?: string; liveMode: boolean; initialError?: string }) {
+export default function Dashboard({ initialCustomers, initialStats, initialActivities, userEmail, shopName = "Mahalla do'koni", liveMode, initialError = "" }: { initialCustomers: DashboardCustomer[]; initialStats: DashboardStats; initialActivities: ActivityItem[]; userEmail: string | null; shopName?: string; liveMode: boolean; initialError?: string }) {
   const [customers, setCustomers] = useState(initialCustomers);
   const [stats, setStats] = useState(initialStats);
+  const [activities, setActivities] = useState(initialActivities);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [actionSheetOpen, setActionSheetOpen] = useState(false);
@@ -214,6 +216,18 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, s
     router.push("/login");
   }
 
+  async function recordActivity(customerId: string | null, eventType: string, description: string) {
+    const localActivity: ActivityItem = { id: `local-${Date.now()}-${Math.random()}`, customer_id: customerId, event_type: eventType, description, created_at: new Date().toISOString() };
+    if (supabase && liveMode) {
+      const { data, error } = await supabase.from("activity_logs").insert({ customer_id: customerId, event_type: eventType, description }).select("id, customer_id, event_type, description, created_at").single();
+      if (!error && data) {
+        setActivities((current) => [data as ActivityItem, ...current].slice(0, 10));
+        return;
+      }
+    }
+    setActivities((current) => [localActivity, ...current].slice(0, 10));
+  }
+
   function closeAddCustomer() {
     setModalOpen(false);
     setFormError("");
@@ -267,6 +281,8 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, s
 
       setCustomers((current) => [newCustomer, ...current]);
       setStats((current) => ({ ...current, activeCustomers: current.activeCustomers + (newCustomer.balance > 0 ? 1 : 0), totalOutstanding: current.totalOutstanding + newCustomer.balance, overdueAmount: current.overdueAmount + (newCustomer.status === "overdue" ? newCustomer.balance : 0) }));
+      void recordActivity(newCustomer.id, "customer", `${newCustomer.name} qo'shildi.`);
+      if (newCustomer.balance > 0) void recordActivity(newCustomer.id, "credit", `${newCustomer.name}ga ${formatMoney(newCustomer.balance)} qarz yozildi.`);
       setNotice({ tone: "success", text: "Mijoz saqlandi." });
       closeAddCustomer();
     } finally {
@@ -346,6 +362,7 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, s
           }
         }
         setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, name: quickForm.name.trim(), phone: quickForm.phone.trim() || "Telefon yo'q" } : item));
+        void recordActivity(customer.id, "customer", `${quickForm.name.trim()} ma'lumotlari yangilandi.`);
         setNotice({ tone: "success", text: "Mijoz yangilandi." });
       }
 
@@ -362,6 +379,7 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, s
           }
         }
         applyCredit(customer, amount, quickForm.dueDate || null);
+        void recordActivity(customer.id, "credit", `${customer.name}ga ${formatMoney(amount)} qarz yozildi.`);
         setNotice({ tone: "success", text: `${customer.name}ga ${formatMoney(amount)} qarz yozildi.` });
       }
 
@@ -376,6 +394,7 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, s
           return;
         }
         applyPayment(customer, amount);
+        void recordActivity(customer.id, "payment", `${customer.name}dan ${formatMoney(amount)} to'lov olindi.`);
         setNotice({ tone: "success", text: `${formatMoney(amount)} to'lov saqlandi.` });
       }
 
@@ -434,6 +453,7 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, s
           }
         }
         applyCredit(customer, amount, entryForm.dueDate || null);
+        void recordActivity(customer.id, "credit", `${customer.name}ga ${formatMoney(amount)} qarz yozildi.`);
         setNotice({ tone: "success", text: `${customer.name}ga ${formatMoney(amount)} qarz yozildi.` });
       } else {
         const paymentError = await recordPayment(customer, amount, entryForm.note);
@@ -442,6 +462,7 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, s
           return;
         }
         applyPayment(customer, amount);
+        void recordActivity(customer.id, "payment", `${customer.name}dan ${formatMoney(amount)} to'lov olindi.`);
         setNotice({ tone: "success", text: `${formatMoney(amount)} to'lov saqlandi.` });
       }
       closeEntry();
@@ -499,7 +520,7 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, s
 
             <div className="panel activity-panel" id="activity">
               <div className="panel-heading"><div><div className="panel-title">So'nggi ishlar</div><div className="panel-subtitle">Daftardagi oxirgi o'zgarishlar</div></div><BookOpen size={18} className="panel-icon" /></div>
-              <div className="activity-list"><div className="empty compact"><BookOpen size={26} /><strong>{liveMode ? "Faoliyat shu yerda chiqadi." : "Supabase ulanishi kerak."}</strong><span>{liveMode ? "Yangi qarz yoki to'lov yozing." : "Haqiqiy ma'lumotlar uchun login qiling."}</span></div></div>
+              <div className="activity-list">{activities.length ? activities.map((activity) => <ActivityRow activity={activity} key={activity.id} />) : <div className="empty compact"><BookOpen size={26} /><strong>{liveMode ? "Faoliyat shu yerda chiqadi." : "Supabase ulanishi kerak."}</strong><span>{liveMode ? "Yangi qarz yoki to'lov yozing." : "Haqiqiy ma'lumotlar uchun login qiling."}</span></div>}</div>
             </div>
           </section>
         </div>
@@ -536,6 +557,10 @@ function StatCard({ label, value, icon, foot, footClass = "" }: { label: string;
 function TransactionRow({ transaction }: { transaction: HistoryTransaction }) {
   const isCredit = transaction.type === "credit";
   return <article className={`history-row ${transaction.type}`}><span className={`history-type-icon ${transaction.type}`} aria-hidden="true">{isCredit ? <Plus size={16} /> : <Check size={16} />}</span><div className="history-row-copy"><div className="history-row-title"><strong>{transaction.description}</strong><span>{isCredit ? "Qarz" : "To'lov"}</span></div><small>{formatHistoryDate(transaction.occurredAt)}{isCredit && transaction.dueDate ? ` · Muddat ${formatDate(transaction.dueDate)}` : ""}</small></div><div className="history-row-values"><strong className="money">{isCredit ? "+" : "−"}{formatMoney(transaction.amount)}</strong><small>Qoldiq {formatMoney(transaction.balanceAfter)}</small></div></article>;
+}
+
+function ActivityRow({ activity }: { activity: ActivityItem }) {
+  return <article className="activity-item"><span className={`activity-dot ${activity.event_type}`} aria-hidden="true" /><div><div className="activity-text">{activity.description}</div><div className="activity-time">{formatHistoryDate(activity.created_at)}</div></div></article>;
 }
 
 function CustomerRow({ customer, onAction, onOpen }: { customer: DashboardCustomer; onAction: (type: QuickAction, customer: DashboardCustomer) => void; onOpen: () => void }) {

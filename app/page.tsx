@@ -9,7 +9,7 @@ const emptyStats: DashboardStats = { totalOutstanding: 0, collectedThisMonth: 0,
 export default async function Home() {
   const supabase = await createClient();
   if (!supabase) {
-    return <Dashboard initialCustomers={[]} initialStats={emptyStats} userEmail={null} shopName="Mahalla do'koni" liveMode={false} initialError="Supabase ulanishi sozlanmagan." />;
+    return <Dashboard initialCustomers={[]} initialStats={emptyStats} initialActivities={[]} userEmail={null} shopName="Mahalla do'koni" liveMode={false} initialError="Supabase ulanishi sozlanmagan." />;
   }
 
   const { data: userData, error: authError } = await supabase.auth.getUser();
@@ -24,8 +24,10 @@ export default async function Home() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    return <Dashboard initialCustomers={[]} initialStats={emptyStats} userEmail={userData.user.email ?? null} shopName={shopName} liveMode initialError="Ma'lumotlar olinmadi. Supabase jadval va RLS sozlamalarini tekshiring." />;
+    return <Dashboard initialCustomers={[]} initialStats={emptyStats} initialActivities={[]} userEmail={userData.user.email ?? null} shopName={shopName} liveMode initialError="Ma'lumotlar olinmadi. Supabase jadval va RLS sozlamalarini tekshiring." />;
   }
+
+  const { data: activityData } = await supabase.from("activity_logs").select("id, customer_id, event_type, description, created_at").order("created_at", { ascending: false }).limit(10);
 
   const customers: DashboardCustomer[] = (data ?? []).map((customer) => {
     const debts = (customer.debts ?? []) as Array<{
@@ -55,5 +57,5 @@ export default async function Home() {
     activeCustomers: customers.filter((customer) => customer.balance > 0).length,
   };
 
-  return <Dashboard initialCustomers={customers} initialStats={stats} userEmail={userData.user.email ?? null} shopName={shopName} liveMode initialError="" />;
+  return <Dashboard initialCustomers={customers} initialStats={stats} initialActivities={(activityData ?? []) as Array<{ id: string; customer_id: string | null; event_type: string; description: string; created_at: string }>} userEmail={userData.user.email ?? null} shopName={shopName} liveMode initialError="" />;
 }
