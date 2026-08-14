@@ -13,10 +13,10 @@ export default function LoginPage() {
     event.preventDefault();
     setMessage("");
     const supabase = createClient();
-    if (!supabase) { setMessage("Add Supabase environment variables before signing in."); return; }
+    if (!supabase) { setMessage("Kirish uchun Supabase sozlamasi kerak."); return; }
     setLoading(true);
     const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}/auth/callback` } });
-    setMessage(error ? error.message : "Check your email for the sign-in link.");
+    setMessage(error ? "Kirish havolasi yuborilmadi. Qayta urinib ko'ring." : "Kirish havolasi emailingizga yuborildi.");
     setLoading(false);
   }
 

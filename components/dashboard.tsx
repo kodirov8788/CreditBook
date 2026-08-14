@@ -27,30 +27,6 @@ const money = new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 0 });
 const dateFormatter = new Intl.DateTimeFormat("uz-UZ", { month: "short", day: "numeric" });
 const fullDateFormatter = new Intl.DateTimeFormat("uz-UZ", { weekday: "long", month: "long", day: "numeric" });
 const statusLabels = { overdue: "Kechikkan", "due-soon": "Yaqin", "on-track": "Vaqtida", paid: "Yopilgan" } as const;
-const demoActivities = [
-  { text: "Jasur Abduqodirovdan to'lov olindi", amount: "450 000 so'm", time: "Bugun, 09:42", kind: "payment" },
-  { text: "Dilshod Karimovga qarz yozildi", amount: "1 250 000 so'm", time: "2-avgust, 15:10", kind: "credit" },
-  { text: "Malika Tursunovaga eslatma yuborildi", amount: "Muddat: 12-avgust", time: "1-avgust, 10:25", kind: "reminder" },
-];
-
-const demoHistory: Record<string, HistoryTransaction[]> = {
-  "demo-1": [
-    { id: "demo-1-credit-1", type: "credit", amount: 1500000, description: "Oziq-ovqat", occurredAt: "2026-07-25T14:20:00+05:00", dueDate: "2026-08-18", status: "open", balanceAfter: 1500000 },
-    { id: "demo-1-payment-1", type: "payment", amount: 250000, description: "Qisman to'lov", occurredAt: "2026-08-02T15:10:00+05:00", dueDate: null, status: null, balanceAfter: 1250000 },
-  ],
-  "demo-2": [
-    { id: "demo-2-credit-1", type: "credit", amount: 1000000, description: "Uy-ro'zg'or", occurredAt: "2026-07-20T10:05:00+05:00", dueDate: "2026-08-12", status: "open", balanceAfter: 1000000 },
-    { id: "demo-2-payment-1", type: "payment", amount: 220000, description: "Qisman to'lov", occurredAt: "2026-07-30T11:30:00+05:00", dueDate: null, status: null, balanceAfter: 780000 },
-  ],
-  "demo-3": [
-    { id: "demo-3-credit-1", type: "credit", amount: 600000, description: "Ichimliklar", occurredAt: "2026-07-28T16:40:00+05:00", dueDate: "2026-08-27", status: "open", balanceAfter: 600000 },
-    { id: "demo-3-payment-1", type: "payment", amount: 150000, description: "Qisman to'lov", occurredAt: "2026-08-05T09:42:00+05:00", dueDate: null, status: null, balanceAfter: 450000 },
-  ],
-  "demo-4": [
-    { id: "demo-4-credit-1", type: "credit", amount: 210000, description: "Kundalik xarid", occurredAt: "2026-08-08T13:15:00+05:00", dueDate: "2026-09-02", status: "open", balanceAfter: 210000 },
-  ],
-};
-
 type QuickAction = "credit" | "payment" | "edit";
 type EntryType = "credit" | "payment";
 type HistoryFilter = "all" | "credit" | "payment";
@@ -91,15 +67,6 @@ function normalizeHistory(credits: HistoryCredit[], payments: HistoryPayment[]) 
   }).reverse();
 }
 
-function recalculateHistory(transactions: HistoryTransaction[]) {
-  const chronological = [...transactions].sort((left, right) => new Date(left.occurredAt).getTime() - new Date(right.occurredAt).getTime());
-  let balance = 0;
-  return chronological.map((transaction) => {
-    balance = Math.max(balance + (transaction.type === "credit" ? transaction.amount : -transaction.amount), 0);
-    return { ...transaction, balanceAfter: balance };
-  }).reverse();
-}
-
 function formatToday() {
   return fullDateFormatter.format(new Date());
 }
@@ -118,7 +85,7 @@ function getStatus(balance: number, dueDate: string | null): CustomerStatus {
   return "on-track";
 }
 
-export default function Dashboard({ initialCustomers, initialStats, userEmail, liveMode }: { initialCustomers: DashboardCustomer[]; initialStats: DashboardStats; userEmail: string | null; liveMode: boolean }) {
+export default function Dashboard({ initialCustomers, initialStats, userEmail, liveMode, initialError = "" }: { initialCustomers: DashboardCustomer[]; initialStats: DashboardStats; userEmail: string | null; liveMode: boolean; initialError?: string }) {
   const [customers, setCustomers] = useState(initialCustomers);
   const [stats, setStats] = useState(initialStats);
   const [search, setSearch] = useState("");
@@ -179,7 +146,8 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
     setHistoryError("");
 
     if (!liveMode) {
-      setHistoryTransactions(demoHistory[customer.id] ?? []);
+      setHistoryTransactions([]);
+      setHistoryError("Supabase ulanishi sozlanmagan.");
       setHistoryLoading(false);
       return;
     }
@@ -225,11 +193,6 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
     setHistoryOpen(false);
     setHistoryFilter("all");
     setHistorySearch("");
-  }
-
-  function appendDemoHistory(customer: DashboardCustomer, transaction: Omit<HistoryTransaction, "balanceAfter">) {
-    if (liveMode || historyCustomerId !== customer.id) return;
-    setHistoryTransactions((current) => recalculateHistory([...current.filter((item) => item.id !== transaction.id), { ...transaction, balanceAfter: 0 }]));
   }
 
   function closeAddCustomer() {
@@ -380,7 +343,6 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
           }
         }
         applyCredit(customer, amount, quickForm.dueDate || null);
-        appendDemoHistory(customer, { id: `local-credit-${Date.now()}`, type: "credit", amount, description: quickForm.note.trim() || "Qarz", occurredAt: new Date().toISOString(), dueDate: quickForm.dueDate || null, status: "open" });
         setNotice({ tone: "success", text: `${customer.name}ga ${formatMoney(amount)} qarz yozildi.` });
       }
 
@@ -395,7 +357,6 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
           return;
         }
         applyPayment(customer, amount);
-        appendDemoHistory(customer, { id: `local-payment-${Date.now()}`, type: "payment", amount, description: quickForm.note.trim() || "To'lov", occurredAt: new Date().toISOString(), dueDate: null, status: null });
         setNotice({ tone: "success", text: `${formatMoney(amount)} to'lov saqlandi.` });
       }
 
@@ -454,7 +415,6 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
           }
         }
         applyCredit(customer, amount, entryForm.dueDate || null);
-        appendDemoHistory(customer, { id: `local-credit-${Date.now()}`, type: "credit", amount, description: entryForm.note.trim() || "Qarz", occurredAt: new Date().toISOString(), dueDate: entryForm.dueDate || null, status: "open" });
         setNotice({ tone: "success", text: `${customer.name}ga ${formatMoney(amount)} qarz yozildi.` });
       } else {
         const paymentError = await recordPayment(customer, amount, entryForm.note);
@@ -463,7 +423,6 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
           return;
         }
         applyPayment(customer, amount);
-        appendDemoHistory(customer, { id: `local-payment-${Date.now()}`, type: "payment", amount, description: entryForm.note.trim() || "To'lov", occurredAt: new Date().toISOString(), dueDate: null, status: null });
         setNotice({ tone: "success", text: `${formatMoney(amount)} to'lov saqlandi.` });
       }
       closeEntry();
@@ -509,7 +468,8 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
             <StatCard label="Faol mijoz" value={String(stats.activeCustomers)} icon={<Users size={17} />} foot="Qoldig'i bor" />
           </section>
 
-          {!liveMode && <div className="setup-note"><strong>Sinov ko'rinishi:</strong> haqiqiy ma'lumotlar uchun Supabase sxemasini ishga tushiring.</div>}
+          {!liveMode && <div className="setup-note"><strong>Ulanish kerak:</strong> {initialError || "Supabase sozlamalarini kiriting."}</div>}
+          {liveMode && initialError && <div className="setup-note"><strong>Ulanish holati:</strong> {initialError}</div>}
 
           <section className="content-grid">
             <div className="panel customers-panel" id="customers">
@@ -520,7 +480,7 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
 
             <div className="panel activity-panel" id="activity">
               <div className="panel-heading"><div><div className="panel-title">So'nggi ishlar</div><div className="panel-subtitle">Daftardagi oxirgi o'zgarishlar</div></div><BookOpen size={18} className="panel-icon" /></div>
-              <div className="activity-list">{liveMode ? <div className="empty compact"><BookOpen size={26} /><strong>Faoliyat shu yerda chiqadi.</strong><span>Yangi qarz yoki to'lov yozing.</span></div> : demoActivities.map((activity) => <Activity key={activity.text} {...activity} />)}</div>
+              <div className="activity-list"><div className="empty compact"><BookOpen size={26} /><strong>{liveMode ? "Faoliyat shu yerda chiqadi." : "Supabase ulanishi kerak."}</strong><span>{liveMode ? "Yangi qarz yoki to'lov yozing." : "Haqiqiy ma'lumotlar uchun login qiling."}</span></div></div>
             </div>
           </section>
         </div>
@@ -561,8 +521,4 @@ function TransactionRow({ transaction }: { transaction: HistoryTransaction }) {
 
 function CustomerRow({ customer, onAction, onOpen }: { customer: DashboardCustomer; onAction: (type: QuickAction, customer: DashboardCustomer) => void; onOpen: () => void }) {
   return <article className="customer-row"><button className="customer-main" onClick={onOpen} aria-label={`${customer.name} tafsilotlarini ochish`}><span className="customer-avatar">{initials(customer.name)}</span><span className="customer-main-copy"><strong className="customer-name">{customer.name}</strong><small className="customer-phone">{customer.phone}</small></span><ChevronRight size={17} className="customer-chevron" /></button><div className="customer-meta"><span>Qoldiq</span><strong className={`row-value money ${customer.balance > 0 && customer.status === "overdue" ? "balance-alert" : ""}`}>{formatMoney(customer.balance)}</strong></div><div className="customer-meta"><span>Muddat</span><strong className="row-value">{formatDate(customer.dueDate)}</strong></div><div className="customer-meta status-meta"><span>Holat</span><span className={`status ${customer.status}`}>{statusLabels[customer.status]}</span></div><div className="quick-actions"><button className="button button-secondary quick-action" onClick={() => onAction("credit", customer)} aria-label={`${customer.name}ga qarz qo'shish`}><Plus size={15} />Qarz</button><button className="button button-primary quick-action" onClick={() => onAction("payment", customer)} aria-label={`${customer.name}dan to'lov olish`} disabled={customer.balance <= 0}><Check size={15} />To'lov</button><button className="button button-ghost quick-action icon-action" onClick={() => onAction("edit", customer)} aria-label={`${customer.name}ni tahrirlash`}><Ellipsis size={17} /></button></div></article>;
-}
-
-function Activity({ text, amount, time, kind }: { text: string; amount: string; time: string; kind: string }) {
-  return <div className="activity-item"><div className={`activity-dot ${kind}`} /><div><div className="activity-text">{text}<br /><strong>{amount}</strong></div><div className="activity-time">{time}</div></div></div>;
 }
