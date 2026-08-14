@@ -23,7 +23,8 @@ import {
   X,
 } from "lucide-react";
 import { createClient, hasSupabaseEnv } from "@/lib/supabase/browser";
-import type { CustomerStatus, DashboardCustomer, DashboardStats } from "@/lib/types";
+import { getCustomerStatus } from "@/lib/customer-status";
+import type { DashboardCustomer, DashboardStats } from "@/lib/types";
 
 const money = new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 0 });
 const dateFormatter = new Intl.DateTimeFormat("uz-UZ", { month: "short", day: "numeric" });
@@ -75,16 +76,6 @@ function formatToday() {
 
 function initials(value: string) {
   return value.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
-}
-
-function getStatus(balance: number, dueDate: string | null): CustomerStatus {
-  if (balance <= 0) return "paid";
-  if (!dueDate) return "on-track";
-  const due = new Date(`${dueDate}T23:59:59`).getTime();
-  const days = (due - Date.now()) / 86400000;
-  if (days < 0) return "overdue";
-  if (days <= 7) return "due-soon";
-  return "on-track";
 }
 
 export default function Dashboard({ initialCustomers, initialStats, userEmail, liveMode, initialError = "" }: { initialCustomers: DashboardCustomer[]; initialStats: DashboardStats; userEmail: string | null; liveMode: boolean; initialError?: string }) {
@@ -265,13 +256,13 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
             setFormError("Mijoz saqlandi, ammo qarz yozilmadi.");
             newCustomer = { id: customer.id, name: customer.name, phone: customer.phone ?? "Telefon yo'q", balance: 0, dueDate: null, status: "paid", lastPayment: null };
           } else {
-            newCustomer = { id: customer.id, name: customer.name, phone: customer.phone ?? "Telefon yo'q", balance: openingAmount, dueDate: form.dueDate || null, status: getStatus(openingAmount, form.dueDate || null), lastPayment: null };
+            newCustomer = { id: customer.id, name: customer.name, phone: customer.phone ?? "Telefon yo'q", balance: openingAmount, dueDate: form.dueDate || null, status: getCustomerStatus(openingAmount, form.dueDate || null), lastPayment: null };
           }
         } else {
           newCustomer = { id: customer.id, name: customer.name, phone: customer.phone ?? "Telefon yo'q", balance: 0, dueDate: null, status: "paid", lastPayment: null };
         }
       } else {
-        newCustomer = { id: `local-${Date.now()}`, name, phone: form.phone.trim() || "Telefon yo'q", balance: openingAmount, dueDate: form.dueDate || null, status: getStatus(openingAmount, form.dueDate || null), lastPayment: null };
+        newCustomer = { id: `local-${Date.now()}`, name, phone: form.phone.trim() || "Telefon yo'q", balance: openingAmount, dueDate: form.dueDate || null, status: getCustomerStatus(openingAmount, form.dueDate || null), lastPayment: null };
       }
 
       setCustomers((current) => [newCustomer, ...current]);
@@ -321,14 +312,14 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
 
   function applyCredit(customer: DashboardCustomer, amount: number, dueDate: string | null) {
     const nextBalance = customer.balance + amount;
-    const nextStatus = getStatus(nextBalance, dueDate ?? customer.dueDate);
+    const nextStatus = getCustomerStatus(nextBalance, dueDate ?? customer.dueDate);
     setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, balance: nextBalance, dueDate: dueDate || item.dueDate, status: nextStatus } : item));
     setStats((current) => ({ ...current, totalOutstanding: current.totalOutstanding + amount, overdueAmount: current.overdueAmount + (nextStatus === "overdue" ? amount : 0), activeCustomers: current.activeCustomers + (customer.balance <= 0 ? 1 : 0) }));
   }
 
   function applyPayment(customer: DashboardCustomer, amount: number) {
     const nextBalance = Math.max(customer.balance - amount, 0);
-    const nextStatus = getStatus(nextBalance, customer.dueDate);
+    const nextStatus = getCustomerStatus(nextBalance, customer.dueDate);
     setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, balance: nextBalance, status: nextStatus, lastPayment: new Date().toISOString() } : item));
     setStats((current) => ({ ...current, totalOutstanding: Math.max(current.totalOutstanding - amount, 0), overdueAmount: Math.max(current.overdueAmount - (customer.status === "overdue" ? amount : 0), 0), collectedThisMonth: current.collectedThisMonth + amount, activeCustomers: nextBalance <= 0 ? Math.max(current.activeCustomers - 1, 0) : current.activeCustomers }));
   }
