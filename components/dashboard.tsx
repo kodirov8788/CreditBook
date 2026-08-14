@@ -259,22 +259,14 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     try {
       let newCustomer: DashboardCustomer;
       if (supabase && liveMode) {
-        const { data: customer, error } = await supabase.from("customers").insert({ name, phone: form.phone.trim() || null }).select("id, name, phone").single();
-        if (error || !customer) {
+        const response = await fetch("/api/customers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, phone: form.phone.trim() || null, amount: openingAmount, dueDate: form.dueDate || null }) });
+        const payload = await response.json().catch(() => null) as { customer?: { id: string; name: string; phone: string | null }; error?: string } | null;
+        const customer = payload?.customer;
+        if (!response.ok || !customer) {
           setFormError("Mijoz saqlanmadi. Qayta urinib ko'ring.");
           return;
         }
-        if (openingAmount > 0) {
-          const { error: debtError } = await supabase.from("debts").insert({ customer_id: customer.id, principal: openingAmount, due_date: form.dueDate || null, title: "Qarz" });
-          if (debtError) {
-            setFormError("Mijoz saqlandi, ammo qarz yozilmadi.");
-            newCustomer = { id: customer.id, name: customer.name, phone: customer.phone ?? "Telefon yo'q", balance: 0, dueDate: null, status: "paid", lastPayment: null };
-          } else {
-            newCustomer = { id: customer.id, name: customer.name, phone: customer.phone ?? "Telefon yo'q", balance: openingAmount, dueDate: form.dueDate || null, status: getCustomerStatus(openingAmount, form.dueDate || null), lastPayment: null };
-          }
-        } else {
-          newCustomer = { id: customer.id, name: customer.name, phone: customer.phone ?? "Telefon yo'q", balance: 0, dueDate: null, status: "paid", lastPayment: null };
-        }
+        newCustomer = { id: customer.id, name: customer.name, phone: customer.phone ?? "Telefon yo'q", balance: openingAmount, dueDate: openingAmount > 0 ? form.dueDate || null : null, status: getCustomerStatus(openingAmount, openingAmount > 0 ? form.dueDate || null : null), lastPayment: null };
       } else {
         newCustomer = { id: `local-${Date.now()}`, name, phone: form.phone.trim() || "Telefon yo'q", balance: openingAmount, dueDate: form.dueDate || null, status: getCustomerStatus(openingAmount, form.dueDate || null), lastPayment: null };
       }

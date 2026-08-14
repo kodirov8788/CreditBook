@@ -22,19 +22,20 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { name?: string; phone?: string; address?: string; notes?: string; amount?: number; dueDate?: string } | null;
   const name = body?.name?.trim();
   if (!name || name.length < 2) return badRequest("Mijoz ismini kiriting.");
+  const amount = body?.amount ?? 0;
+  if (!Number.isFinite(amount) || amount < 0) return badRequest("Qarz summasini tekshiring.");
 
-  const { data: customer, error } = await supabase
-    .from("customers")
-    .insert({ name, phone: body?.phone?.trim() || null, address: body?.address?.trim() || null, notes: body?.notes?.trim() || null })
-    .select("id, name, phone, address, notes, created_at")
-    .single();
+  const { data, error } = await supabase.rpc("create_customer_with_opening_debt", {
+    p_name: name,
+    p_phone: body?.phone?.trim() || null,
+    p_address: body?.address?.trim() || null,
+    p_notes: body?.notes?.trim() || null,
+    p_amount: amount,
+    p_due_date: body?.dueDate || null,
+  });
+  const customer = Array.isArray(data) ? data[0] : data;
 
   if (error || !customer) return serverError();
-
-  if (body?.amount && body.amount > 0) {
-    const { error: debtError } = await supabase.from("debts").insert({ customer_id: customer.id, principal: body.amount, due_date: body.dueDate || null, title: "Qarz" });
-    if (debtError) return serverError();
-  }
 
   return NextResponse.json({ customer }, { status: 201 });
 }
