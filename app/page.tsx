@@ -9,11 +9,14 @@ const emptyStats: DashboardStats = { totalOutstanding: 0, collectedThisMonth: 0,
 export default async function Home() {
   const supabase = await createClient();
   if (!supabase) {
-    return <Dashboard initialCustomers={[]} initialStats={emptyStats} userEmail={null} liveMode={false} initialError="Supabase ulanishi sozlanmagan." />;
+    return <Dashboard initialCustomers={[]} initialStats={emptyStats} userEmail={null} shopName="Mahalla do'koni" liveMode={false} initialError="Supabase ulanishi sozlanmagan." />;
   }
 
   const { data: userData, error: authError } = await supabase.auth.getUser();
   if (authError || !userData.user) redirect("/login");
+
+  const { data: profile } = await supabase.from("profiles").select("shop_name").eq("id", userData.user.id).maybeSingle();
+  const shopName = profile?.shop_name?.trim() || "Mahalla do'koni";
 
   const { data, error } = await supabase
     .from("customers")
@@ -21,7 +24,7 @@ export default async function Home() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    return <Dashboard initialCustomers={[]} initialStats={emptyStats} userEmail={userData.user.email ?? null} liveMode initialError="Ma'lumotlar olinmadi. Supabase jadval va RLS sozlamalarini tekshiring." />;
+    return <Dashboard initialCustomers={[]} initialStats={emptyStats} userEmail={userData.user.email ?? null} shopName={shopName} liveMode initialError="Ma'lumotlar olinmadi. Supabase jadval va RLS sozlamalarini tekshiring." />;
   }
 
   const customers: DashboardCustomer[] = (data ?? []).map((customer) => {
@@ -52,5 +55,5 @@ export default async function Home() {
     activeCustomers: customers.filter((customer) => customer.balance > 0).length,
   };
 
-  return <Dashboard initialCustomers={customers} initialStats={stats} userEmail={userData.user.email ?? null} liveMode initialError="" />;
+  return <Dashboard initialCustomers={customers} initialStats={stats} userEmail={userData.user.email ?? null} shopName={shopName} liveMode initialError="" />;
 }
