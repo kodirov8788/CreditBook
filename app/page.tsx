@@ -1,4 +1,5 @@
 import Dashboard from "@/components/dashboard";
+import { getCustomerStatus } from "@/lib/customer-status";
 import { createClient } from "@/lib/supabase/server";
 import type { DashboardCustomer, DashboardStats } from "@/lib/types";
 import { redirect } from "next/navigation";
@@ -36,7 +37,7 @@ export default async function Home() {
     }, 0);
     const dueDate = debts.map((debt) => debt.due_date).filter(Boolean).sort()[0] ?? null;
     const lastPayment = debts.flatMap((debt) => debt.payments.map((payment) => payment.paid_at)).sort().at(-1) ?? null;
-    const status = balance === 0 ? "paid" : dueDate && new Date(dueDate) < new Date() ? "overdue" : "on-track";
+    const status = getCustomerStatus(balance, dueDate);
     return { id: customer.id, name: customer.name, phone: customer.phone ?? "Telefon yo'q", balance, dueDate, status, lastPayment };
   });
   const monthPrefix = new Date().toISOString().slice(0, 7);
