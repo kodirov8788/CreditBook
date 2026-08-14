@@ -78,7 +78,7 @@ function initials(value: string) {
   return value.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 }
 
-export default function Dashboard({ initialCustomers, initialStats, userEmail, liveMode, initialError = "" }: { initialCustomers: DashboardCustomer[]; initialStats: DashboardStats; userEmail: string | null; liveMode: boolean; initialError?: string }) {
+export default function Dashboard({ initialCustomers, initialStats, userEmail, shopName = "Mahalla do'koni", liveMode, initialError = "" }: { initialCustomers: DashboardCustomer[]; initialStats: DashboardStats; userEmail: string | null; shopName?: string; liveMode: boolean; initialError?: string }) {
   const [customers, setCustomers] = useState(initialCustomers);
   const [stats, setStats] = useState(initialStats);
   const [search, setSearch] = useState("");
@@ -462,7 +462,7 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
           <a className={`nav-item ${activeSection === "more" ? "active" : ""}`} href="#more" onClick={() => { setActiveSection("more"); setMoreOpen(true); }}><ArrowDownToLine size={18} />Hisobot</a>
         </nav>
         <div className="sidebar-spacer" />
-        <div className="shop-card"><div className="shop-label">Do'kon</div><div className="shop-name">Mahalla do'koni</div><div className="shop-owner">{userEmail ?? "Sinov rejimi"}</div></div>
+        <div className="shop-card"><div className="shop-label">Do'kon</div><div className="shop-name">{shopName}</div><div className="shop-owner">{userEmail ?? "Sinov rejimi"}</div></div>
       </aside>
 
       <main className="main-area">
