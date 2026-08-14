@@ -3,6 +3,7 @@
 /* eslint-disable react/no-unescaped-entities */
 
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowDownToLine,
   Bell,
@@ -14,6 +15,7 @@ import {
   Clock3,
   Ellipsis,
   LayoutDashboard,
+  LogOut,
   Plus,
   Search,
   Users,
@@ -111,7 +113,9 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [historySearch, setHistorySearch] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
+  const [signingOut, setSigningOut] = useState(false);
   const supabase = hasSupabaseEnv() ? createClient() : null;
+  const router = useRouter();
 
   const filteredCustomers = useMemo(() => customers.filter((customer) => `${customer.name} ${customer.phone}`.toLowerCase().includes(search.toLowerCase())), [customers, search]);
   const entryOptions = useMemo(() => {
@@ -193,6 +197,19 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
     setHistoryOpen(false);
     setHistoryFilter("all");
     setHistorySearch("");
+  }
+
+  async function handleLogout() {
+    setSigningOut(true);
+    if (supabase) {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        setSigningOut(false);
+        setNotice({ tone: "info", text: "Chiqish amalga oshmadi. Qayta urinib ko'ring." });
+        return;
+      }
+    }
+    router.push("/login");
   }
 
   function closeAddCustomer() {
@@ -450,7 +467,7 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
         <header className="topbar">
           <div className="mobile-brand"><div className="brand-mark">C</div><strong>CreditBook</strong></div>
           <div className="topbar-copy"><div className="topbar-title">{formatToday()}</div><div className="topbar-subtitle">Qarzlarni oson nazorat qiling.</div></div>
-          <div className="user-chip"><span>{userEmail ?? "Sinov rejimi"}</span><div className="avatar">{userEmail ? initials(userEmail) : "SR"}</div><button className="icon-button mobile-notice" onClick={() => setMoreOpen(true)} aria-label="Eslatmalarni ochish"><Bell size={19} /></button></div>
+          <div className="user-chip"><span>{userEmail ?? "Sinov rejimi"}</span><div className="avatar">{userEmail ? initials(userEmail) : "SR"}</div><button className="icon-button mobile-notice" onClick={() => setMoreOpen(true)} aria-label="Eslatmalarni ochish"><Bell size={19} /></button><button className="icon-button" onClick={() => void handleLogout()} disabled={signingOut} aria-label="Chiqish" title="Chiqish"><LogOut size={18} /></button></div>
         </header>
 
         <div className="page" id="dashboard">
