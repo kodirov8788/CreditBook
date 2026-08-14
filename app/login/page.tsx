@@ -15,7 +15,8 @@ export default function LoginPage() {
     const supabase = createClient();
     if (!supabase) { setMessage("Kirish uchun Supabase sozlamasi kerak."); return; }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}/auth/callback` } });
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || window.location.origin).replace(/\/$/, "");
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${appUrl}/auth/callback` } });
     setMessage(error ? "Kirish havolasi yuborilmadi. Qayta urinib ko'ring." : "Kirish havolasi emailingizga yuborildi.");
     setLoading(false);
   }
