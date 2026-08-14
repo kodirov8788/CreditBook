@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 
 export async function getAuthenticatedClient(request?: Request) {
-  const supabase = await createClient();
+  const supabase = await createClient(request);
   if (!supabase) return { supabase: null, user: null };
 
   const authorization = request?.headers.get("authorization");
