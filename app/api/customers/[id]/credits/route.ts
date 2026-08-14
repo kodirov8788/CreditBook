@@ -4,9 +4,9 @@ import { getAuthenticatedClient } from "@/lib/api/auth";
 
 type Context = { params: Promise<{ id: string }> };
 
-export async function GET(_request: Request, context: Context) {
+export async function GET(request: Request, context: Context) {
   const { id } = await context.params;
-  const { supabase, user } = await getAuthenticatedClient();
+  const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
   const { data, error } = await supabase.from("debts").select("id, title, principal, due_date, status, notes, created_at, updated_at, payments(id, amount, paid_at, note)").eq("customer_id", id).order("created_at", { ascending: false });
   if (error) return serverError();
@@ -15,7 +15,7 @@ export async function GET(_request: Request, context: Context) {
 
 export async function POST(request: Request, context: Context) {
   const { id } = await context.params;
-  const { supabase, user } = await getAuthenticatedClient();
+  const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
   const body = await request.json().catch(() => null) as { amount?: number; title?: string; dueDate?: string; notes?: string } | null;
   if (!body?.amount || body.amount <= 0) return badRequest("Qarz summasini kiriting.");

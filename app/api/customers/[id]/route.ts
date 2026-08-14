@@ -4,9 +4,9 @@ import { getAuthenticatedClient } from "@/lib/api/auth";
 
 type Context = { params: Promise<{ id: string }> };
 
-export async function GET(_request: Request, context: Context) {
+export async function GET(request: Request, context: Context) {
   const { id } = await context.params;
-  const { supabase, user } = await getAuthenticatedClient();
+  const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
 
   const { data, error } = await supabase.from("customers").select("id, name, phone, address, notes, created_at, updated_at, debts(id, title, principal, due_date, status, created_at, payments(id, amount, paid_at, note))").eq("id", id).single();
@@ -16,7 +16,7 @@ export async function GET(_request: Request, context: Context) {
 
 export async function PATCH(request: Request, context: Context) {
   const { id } = await context.params;
-  const { supabase, user } = await getAuthenticatedClient();
+  const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
   const body = await request.json().catch(() => null) as { name?: string; phone?: string; address?: string; notes?: string } | null;
   const name = body?.name?.trim();

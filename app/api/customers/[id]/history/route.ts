@@ -4,9 +4,9 @@ import { getAuthenticatedClient } from "@/lib/api/auth";
 
 type Context = { params: Promise<{ id: string }> };
 
-export async function GET(_request: Request, context: Context) {
+export async function GET(request: Request, context: Context) {
   const { id } = await context.params;
-  const { supabase, user } = await getAuthenticatedClient();
+  const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
 
   const [{ data: credits, error: creditError }, { data: payments, error: paymentError }] = await Promise.all([

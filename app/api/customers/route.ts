@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { badRequest, serverError, unauthorized } from "@/lib/api/response";
 import { getAuthenticatedClient } from "@/lib/api/auth";
 
-export async function GET() {
-  const { supabase, user } = await getAuthenticatedClient();
+export async function GET(request: Request) {
+  const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
 
   const { data, error } = await supabase
@@ -16,7 +16,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { supabase, user } = await getAuthenticatedClient();
+  const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
 
   const body = await request.json().catch(() => null) as { name?: string; phone?: string; address?: string; notes?: string; amount?: number; dueDate?: string } | null;
