@@ -2,27 +2,66 @@
 /* Uzbek Latin text intentionally uses apostrophes in visible labels. */
 /* eslint-disable react/no-unescaped-entities */
 
-import { useMemo, useState } from "react";
-import { ArrowDownToLine, Bell, BookOpen, Check, CircleDollarSign, Clock3, Ellipsis, LayoutDashboard, Plus, Search, Settings, Users, X } from "lucide-react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import {
+  ArrowDownToLine,
+  Bell,
+  BookOpen,
+  CalendarDays,
+  Check,
+  ChevronRight,
+  CircleDollarSign,
+  Clock3,
+  Ellipsis,
+  LayoutDashboard,
+  Plus,
+  Search,
+  Users,
+  WalletCards,
+  X,
+} from "lucide-react";
 import { createClient, hasSupabaseEnv } from "@/lib/supabase/browser";
-import type { DashboardCustomer, DashboardStats } from "@/lib/types";
+import type { CustomerStatus, DashboardCustomer, DashboardStats } from "@/lib/types";
 
 const money = new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 0 });
 const dateFormatter = new Intl.DateTimeFormat("uz-UZ", { month: "short", day: "numeric" });
+const fullDateFormatter = new Intl.DateTimeFormat("uz-UZ", { weekday: "long", month: "long", day: "numeric" });
 const statusLabels = { overdue: "Kechikkan", "due-soon": "Yaqin", "on-track": "Vaqtida", paid: "Yopilgan" } as const;
+const demoActivities = [
+  { text: "Jasur Abduqodirovdan to'lov olindi", amount: "450 000 so'm", time: "Bugun, 09:42", kind: "payment" },
+  { text: "Dilshod Karimovga qarz yozildi", amount: "1 250 000 so'm", time: "2-avgust, 15:10", kind: "credit" },
+  { text: "Malika Tursunovaga eslatma yuborildi", amount: "Muddat: 12-avgust", time: "1-avgust, 10:25", kind: "reminder" },
+];
+
 type QuickAction = "credit" | "payment" | "edit";
+type EntryType = "credit" | "payment";
+type Notice = { tone: "success" | "info"; text: string } | null;
 
 function formatMoney(value: number) {
   return `${money.format(value)} so'm`;
 }
 
 function formatDate(value: string | null) {
-  if (!value) return "Not set";
+  if (!value) return "Muddat yo'q";
   return dateFormatter.format(new Date(`${value}T12:00:00`));
+}
+
+function formatToday() {
+  return fullDateFormatter.format(new Date());
 }
 
 function initials(value: string) {
   return value.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function getStatus(balance: number, dueDate: string | null): CustomerStatus {
+  if (balance <= 0) return "paid";
+  if (!dueDate) return "on-track";
+  const due = new Date(`${dueDate}T23:59:59`).getTime();
+  const days = (due - Date.now()) / 86400000;
+  if (days < 0) return "overdue";
+  if (days <= 7) return "due-soon";
+  return "on-track";
 }
 
 export default function Dashboard({ initialCustomers, initialStats, userEmail, liveMode }: { initialCustomers: DashboardCustomer[]; initialStats: DashboardStats; userEmail: string | null; liveMode: boolean }) {
@@ -30,40 +69,95 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
   const [stats, setStats] = useState(initialStats);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [actionSheetOpen, setActionSheetOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", amount: "", dueDate: "" });
+  const [formError, setFormError] = useState("");
   const [quickAction, setQuickAction] = useState<{ type: QuickAction; customer: DashboardCustomer } | null>(null);
   const [quickForm, setQuickForm] = useState({ name: "", phone: "", amount: "", dueDate: "", note: "" });
   const [quickError, setQuickError] = useState("");
+  const [entryType, setEntryType] = useState<EntryType | null>(null);
+  const [entryForm, setEntryForm] = useState({ customerId: "", amount: "", dueDate: "", note: "" });
+  const [entryCustomerQuery, setEntryCustomerQuery] = useState("");
+  const [entryError, setEntryError] = useState("");
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice>(null);
   const supabase = hasSupabaseEnv() ? createClient() : null;
 
   const filteredCustomers = useMemo(() => customers.filter((customer) => `${customer.name} ${customer.phone}`.toLowerCase().includes(search.toLowerCase())), [customers, search]);
+  const entryOptions = useMemo(() => {
+    const query = entryCustomerQuery.toLowerCase().trim();
+    return customers.filter((customer) => !query || `${customer.name} ${customer.phone}`.toLowerCase().includes(query)).slice(0, 5);
+  }, [customers, entryCustomerQuery]);
+  const entryCustomer = entryForm.customerId ? customers.find((customer) => customer.id === entryForm.customerId) ?? null : null;
+  const selectedCustomer = selectedCustomerId ? customers.find((customer) => customer.id === selectedCustomerId) ?? null : null;
 
-  async function addCustomer(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!form.name.trim()) return;
-    setSaving(true);
-
-    if (supabase && liveMode) {
-      const { data: customer, error } = await supabase.from("customers").insert({ name: form.name.trim(), phone: form.phone.trim() || null }).select("id, name, phone").single();
-      if (!error && customer) {
-        if (Number(form.amount) > 0) await supabase.from("debts").insert({ customer_id: customer.id, principal: Number(form.amount), due_date: form.dueDate || null, title: "Opening credit" });
-      }
-    } else {
-      const newCustomer: DashboardCustomer = { id: `local-${Date.now()}`, name: form.name.trim(), phone: form.phone.trim() || "Telefon yo'q", balance: Number(form.amount) || 0, dueDate: form.dueDate || null, status: form.amount ? "on-track" : "paid", lastPayment: null };
-      setCustomers((current) => [newCustomer, ...current]);
-      setStats((current) => ({ ...current, activeCustomers: current.activeCustomers + 1, totalOutstanding: current.totalOutstanding + newCustomer.balance }));
-    }
-
-    setSaving(false);
+  function closeAddCustomer() {
     setModalOpen(false);
+    setFormError("");
     setForm({ name: "", phone: "", amount: "", dueDate: "" });
   }
 
+  function openAddCustomer() {
+    setActionSheetOpen(false);
+    setMoreOpen(false);
+    setFormError("");
+    setModalOpen(true);
+  }
+
+  async function addCustomer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = form.name.trim();
+    const openingAmount = Number(form.amount);
+    if (!name) {
+      setFormError("Mijoz ismini kiriting.");
+      return;
+    }
+    if (!Number.isFinite(openingAmount) || openingAmount < 0) {
+      setFormError("Qarz summasini tekshiring.");
+      return;
+    }
+
+    setSaving(true);
+    setFormError("");
+    try {
+      let newCustomer: DashboardCustomer;
+      if (supabase && liveMode) {
+        const { data: customer, error } = await supabase.from("customers").insert({ name, phone: form.phone.trim() || null }).select("id, name, phone").single();
+        if (error || !customer) {
+          setFormError("Mijoz saqlanmadi. Qayta urinib ko'ring.");
+          return;
+        }
+        if (openingAmount > 0) {
+          const { error: debtError } = await supabase.from("debts").insert({ customer_id: customer.id, principal: openingAmount, due_date: form.dueDate || null, title: "Qarz" });
+          if (debtError) {
+            setFormError("Mijoz saqlandi, ammo qarz yozilmadi.");
+            newCustomer = { id: customer.id, name: customer.name, phone: customer.phone ?? "Telefon yo'q", balance: 0, dueDate: null, status: "paid", lastPayment: null };
+          } else {
+            newCustomer = { id: customer.id, name: customer.name, phone: customer.phone ?? "Telefon yo'q", balance: openingAmount, dueDate: form.dueDate || null, status: getStatus(openingAmount, form.dueDate || null), lastPayment: null };
+          }
+        } else {
+          newCustomer = { id: customer.id, name: customer.name, phone: customer.phone ?? "Telefon yo'q", balance: 0, dueDate: null, status: "paid", lastPayment: null };
+        }
+      } else {
+        newCustomer = { id: `local-${Date.now()}`, name, phone: form.phone.trim() || "Telefon yo'q", balance: openingAmount, dueDate: form.dueDate || null, status: getStatus(openingAmount, form.dueDate || null), lastPayment: null };
+      }
+
+      setCustomers((current) => [newCustomer, ...current]);
+      setStats((current) => ({ ...current, activeCustomers: current.activeCustomers + (newCustomer.balance > 0 ? 1 : 0), totalOutstanding: current.totalOutstanding + newCustomer.balance, overdueAmount: current.overdueAmount + (newCustomer.status === "overdue" ? newCustomer.balance : 0) }));
+      setNotice({ tone: "success", text: "Mijoz saqlandi." });
+      closeAddCustomer();
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function openQuickAction(type: QuickAction, customer: DashboardCustomer) {
+    setSelectedCustomerId(null);
     setQuickAction({ type, customer });
     setQuickError("");
-    setQuickForm({ name: customer.name, phone: customer.phone === "Telefon yo'q" ? "" : customer.phone, amount: type === "payment" ? String(customer.balance) : "", dueDate: customer.dueDate ?? "", note: "" });
+    setQuickForm({ name: customer.name, phone: customer.phone === "Telefon yo'q" ? "" : customer.phone, amount: "", dueDate: customer.dueDate ?? "", note: "" });
   }
 
   function closeQuickAction() {
@@ -71,7 +165,45 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
     setQuickError("");
   }
 
-  async function submitQuickAction(event: React.FormEvent<HTMLFormElement>) {
+  async function recordPayment(customer: DashboardCustomer, amount: number, note: string) {
+    if (!supabase || !liveMode) return null;
+    const { data: debts, error: debtError } = await supabase.from("debts").select("id, principal, payments(amount)").eq("customer_id", customer.id).eq("status", "open").order("created_at", { ascending: true });
+    if (debtError) return "Qarzlar olinmadi. Qayta urinib ko'ring.";
+
+    let left = amount;
+    for (const debt of (debts ?? []) as Array<{ id: string; principal: number; payments: Array<{ amount: number }> }>) {
+      if (left <= 0) break;
+      const paid = debt.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+      const open = Math.max(Number(debt.principal) - paid, 0);
+      const part = Math.min(left, open);
+      if (part > 0) {
+        const { error: paymentError } = await supabase.from("payments").insert({ customer_id: customer.id, debt_id: debt.id, amount: part, note: note.trim() || null });
+        if (paymentError) return "To'lov yozilmadi. Qayta urinib ko'ring.";
+        if (part >= open) {
+          const { error: closeError } = await supabase.from("debts").update({ status: "paid" }).eq("id", debt.id);
+          if (closeError) return "Qarz holati yangilanmadi.";
+        }
+        left -= part;
+      }
+    }
+    return left > 0 ? "To'lov to'liq taqsimlanmadi." : null;
+  }
+
+  function applyCredit(customer: DashboardCustomer, amount: number, dueDate: string | null) {
+    const nextBalance = customer.balance + amount;
+    const nextStatus = getStatus(nextBalance, dueDate ?? customer.dueDate);
+    setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, balance: nextBalance, dueDate: dueDate || item.dueDate, status: nextStatus } : item));
+    setStats((current) => ({ ...current, totalOutstanding: current.totalOutstanding + amount, overdueAmount: current.overdueAmount + (nextStatus === "overdue" ? amount : 0), activeCustomers: current.activeCustomers + (customer.balance <= 0 ? 1 : 0) }));
+  }
+
+  function applyPayment(customer: DashboardCustomer, amount: number) {
+    const nextBalance = Math.max(customer.balance - amount, 0);
+    const nextStatus = getStatus(nextBalance, customer.dueDate);
+    setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, balance: nextBalance, status: nextStatus, lastPayment: new Date().toISOString() } : item));
+    setStats((current) => ({ ...current, totalOutstanding: Math.max(current.totalOutstanding - amount, 0), overdueAmount: Math.max(current.overdueAmount - (customer.status === "overdue" ? amount : 0), 0), collectedThisMonth: current.collectedThisMonth + amount, activeCustomers: nextBalance <= 0 ? Math.max(current.activeCustomers - 1, 0) : current.activeCustomers }));
+  }
+
+  async function submitQuickAction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!quickAction) return;
     const { type, customer } = quickAction;
@@ -79,49 +211,122 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
     setSaving(true);
     setQuickError("");
 
-    if (type === "edit") {
-      if (!quickForm.name.trim()) { setQuickError("Ismni kiriting."); setSaving(false); return; }
-      if (supabase && liveMode) {
-        const { error } = await supabase.from("customers").update({ name: quickForm.name.trim(), phone: quickForm.phone.trim() || null }).eq("id", customer.id);
-        if (error) { setQuickError("Saqlab bo'lmadi."); setSaving(false); return; }
-      }
-      setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, name: quickForm.name.trim(), phone: quickForm.phone.trim() || "Telefon yo'q" } : item));
-    }
-
-    if (type === "credit") {
-      if (!Number.isFinite(amount) || amount <= 0) { setQuickError("Summani kiriting."); setSaving(false); return; }
-      if (supabase && liveMode) {
-        const { error } = await supabase.from("debts").insert({ customer_id: customer.id, principal: amount, due_date: quickForm.dueDate || null, title: quickForm.note.trim() || "Qarz" });
-        if (error) { setQuickError("Qarz yozilmadi."); setSaving(false); return; }
-      }
-      setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, balance: item.balance + amount, dueDate: quickForm.dueDate || item.dueDate, status: "on-track" } : item));
-      setStats((current) => ({ ...current, totalOutstanding: current.totalOutstanding + amount, activeCustomers: current.activeCustomers + (customer.balance === 0 ? 1 : 0) }));
-    }
-
-    if (type === "payment") {
-      if (!Number.isFinite(amount) || amount <= 0 || amount > customer.balance) { setQuickError("To'lov qoldiqdan oshmasin."); setSaving(false); return; }
-      if (supabase && liveMode) {
-        const { data: debts, error: debtError } = await supabase.from("debts").select("id, principal, payments(amount)").eq("customer_id", customer.id).eq("status", "open").order("created_at", { ascending: true });
-        if (debtError) { setQuickError("Qarzlar olinmadi."); setSaving(false); return; }
-        let left = amount;
-        for (const debt of (debts ?? []) as Array<{ id: string; principal: number; payments: Array<{ amount: number }> }>) {
-          if (left <= 0) break;
-          const paid = debt.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
-          const open = Math.max(Number(debt.principal) - paid, 0);
-          const part = Math.min(left, open);
-          if (part > 0) {
-            await supabase.from("payments").insert({ customer_id: customer.id, debt_id: debt.id, amount: part, note: quickForm.note.trim() || null });
-            if (part >= open) await supabase.from("debts").update({ status: "paid" }).eq("id", debt.id);
-            left -= part;
+    try {
+      if (type === "edit") {
+        if (!quickForm.name.trim()) {
+          setQuickError("Ismni kiriting.");
+          return;
+        }
+        if (supabase && liveMode) {
+          const { error } = await supabase.from("customers").update({ name: quickForm.name.trim(), phone: quickForm.phone.trim() || null }).eq("id", customer.id);
+          if (error) {
+            setQuickError("Saqlab bo'lmadi.");
+            return;
           }
         }
+        setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, name: quickForm.name.trim(), phone: quickForm.phone.trim() || "Telefon yo'q" } : item));
+        setNotice({ tone: "success", text: "Mijoz yangilandi." });
       }
-      setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, balance: item.balance - amount, status: item.balance - amount <= 0 ? "paid" : item.status } : item));
-      setStats((current) => ({ ...current, totalOutstanding: Math.max(current.totalOutstanding - amount, 0), collectedThisMonth: current.collectedThisMonth + amount, activeCustomers: customer.balance - amount <= 0 ? Math.max(current.activeCustomers - 1, 0) : current.activeCustomers }));
+
+      if (type === "credit") {
+        if (!Number.isFinite(amount) || amount <= 0) {
+          setQuickError("Summani kiriting.");
+          return;
+        }
+        if (supabase && liveMode) {
+          const { error } = await supabase.from("debts").insert({ customer_id: customer.id, principal: amount, due_date: quickForm.dueDate || null, title: quickForm.note.trim() || "Qarz" });
+          if (error) {
+            setQuickError("Qarz yozilmadi.");
+            return;
+          }
+        }
+        applyCredit(customer, amount, quickForm.dueDate || null);
+        setNotice({ tone: "success", text: `${customer.name}ga ${formatMoney(amount)} qarz yozildi.` });
+      }
+
+      if (type === "payment") {
+        if (!Number.isFinite(amount) || amount <= 0 || amount > customer.balance) {
+          setQuickError(`To'lov 0 dan katta va ${formatMoney(customer.balance)} dan oshmasin.`);
+          return;
+        }
+        const paymentError = await recordPayment(customer, amount, quickForm.note);
+        if (paymentError) {
+          setQuickError(paymentError);
+          return;
+        }
+        applyPayment(customer, amount);
+        setNotice({ tone: "success", text: `${formatMoney(amount)} to'lov saqlandi.` });
+      }
+
+      closeQuickAction();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openEntry(type: EntryType) {
+    setActionSheetOpen(false);
+    setEntryType(type);
+    setEntryError("");
+    setEntryCustomerQuery("");
+    setEntryForm({ customerId: "", amount: "", dueDate: "", note: "" });
+  }
+
+  function closeEntry() {
+    setEntryType(null);
+    setEntryError("");
+    setEntryCustomerQuery("");
+  }
+
+  function chooseEntryCustomer(customer: DashboardCustomer) {
+    setEntryForm((current) => ({ ...current, customerId: customer.id }));
+    setEntryCustomerQuery(customer.name);
+  }
+
+  async function submitEntry(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!entryType) return;
+    const customer = customers.find((item) => item.id === entryForm.customerId);
+    const amount = Number(entryForm.amount);
+    if (!customer) {
+      setEntryError("Avval mijozni tanlang.");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setEntryError("Summani kiriting.");
+      return;
+    }
+    if (entryType === "payment" && amount > customer.balance) {
+      setEntryError(`To'lov ${formatMoney(customer.balance)} dan oshmasin.`);
+      return;
     }
 
-    setSaving(false);
-    closeQuickAction();
+    setSaving(true);
+    setEntryError("");
+    try {
+      if (entryType === "credit") {
+        if (supabase && liveMode) {
+          const { error } = await supabase.from("debts").insert({ customer_id: customer.id, principal: amount, due_date: entryForm.dueDate || null, title: entryForm.note.trim() || "Qarz" });
+          if (error) {
+            setEntryError("Qarz yozilmadi. Qayta urinib ko'ring.");
+            return;
+          }
+        }
+        applyCredit(customer, amount, entryForm.dueDate || null);
+        setNotice({ tone: "success", text: `${customer.name}ga ${formatMoney(amount)} qarz yozildi.` });
+      } else {
+        const paymentError = await recordPayment(customer, amount, entryForm.note);
+        if (paymentError) {
+          setEntryError(paymentError);
+          return;
+        }
+        applyPayment(customer, amount);
+        setNotice({ tone: "success", text: `${formatMoney(amount)} to'lov saqlandi.` });
+      }
+      closeEntry();
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -129,43 +334,85 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
       <aside className="sidebar">
         <div className="brand"><div className="brand-mark">C</div><div className="brand-name">CreditBook</div></div>
         <nav className="nav-list" aria-label="Asosiy menyu">
-          <a className="nav-item active" href="#dashboard"><LayoutDashboard size={17} />Bosh sahifa</a>
-          <a className="nav-item" href="#customers"><Users size={17} />Mijozlar</a>
-          <a className="nav-item" href="#payments"><CircleDollarSign size={17} />To'lovlar</a>
-          <a className="nav-item" href="#reminders"><Bell size={17} />Eslatmalar</a>
-          <a className="nav-item" href="#reports"><ArrowDownToLine size={17} />Hisobot</a>
+          <a className="nav-item active" href="#dashboard"><LayoutDashboard size={18} />Bosh sahifa</a>
+          <a className="nav-item" href="#customers"><Users size={18} />Mijozlar</a>
+          <a className="nav-item" href="#activity"><CircleDollarSign size={18} />Faoliyat</a>
+          <a className="nav-item" href="#more" onClick={() => setMoreOpen(true)}><Bell size={18} />Eslatmalar</a>
+          <a className="nav-item" href="#more" onClick={() => setMoreOpen(true)}><ArrowDownToLine size={18} />Hisobot</a>
         </nav>
         <div className="sidebar-spacer" />
         <div className="shop-card"><div className="shop-label">Do'kon</div><div className="shop-name">Mahalla do'koni</div><div className="shop-owner">{userEmail ?? "Sinov rejimi"}</div></div>
       </aside>
 
       <main className="main-area">
-        <header className="topbar"><div><div className="topbar-title">18-avgust, seshanba</div><div className="topbar-subtitle">Qarzlarni oson nazorat qiling.</div></div><div className="user-chip"><span>{userEmail ?? "Sinov rejimi"}</span><div className="avatar">{userEmail ? initials(userEmail) : "SR"}</div></div></header>
-        <div className="page" id="dashboard">
-          <div className="page-heading"><div><div className="eyebrow">Umumiy</div><h1>Xayrli tong.</h1><div className="muted" style={{ marginTop: 10, fontSize: 13 }}>Bugungi qarzlar holati.</div></div><button className="button button-primary" onClick={() => setModalOpen(true)}><Plus size={17} />Mijoz qo'shish</button></div>
+        <header className="topbar">
+          <div className="mobile-brand"><div className="brand-mark">C</div><strong>CreditBook</strong></div>
+          <div className="topbar-copy"><div className="topbar-title">{formatToday()}</div><div className="topbar-subtitle">Qarzlarni oson nazorat qiling.</div></div>
+          <div className="user-chip"><span>{userEmail ?? "Sinov rejimi"}</span><div className="avatar">{userEmail ? initials(userEmail) : "SR"}</div><button className="icon-button mobile-notice" onClick={() => setMoreOpen(true)} aria-label="Eslatmalarni ochish"><Bell size={19} /></button></div>
+        </header>
 
-          <section className="stats-grid" aria-label="Credit book totals">
-            <StatCard label="Jami qarz" value={formatMoney(stats.totalOutstanding)} icon={<CircleDollarSign size={16} />} foot="Barcha faol qarzlar" />
-            <StatCard label="Bu oy to'lov" value={formatMoney(stats.collectedThisMonth)} icon={<Check size={16} />} foot="O'tgan oydan 12,4% ko'p" footClass="good" />
-            <StatCard label="Kechikkan" value={formatMoney(stats.overdueAmount)} icon={<Clock3 size={16} />} foot="E'tibor kerak" footClass="warn" />
-            <StatCard label="Faol mijoz" value={String(stats.activeCustomers)} icon={<Users size={16} />} foot="Qoldig'i bor mijozlar" />
+        <div className="page" id="dashboard">
+          <section className="hero">
+            <div><div className="eyebrow">Bugun</div><h1>Qarzlar tayyor.</h1><p>Do'koningizdagi qoldiqni bir necha bosishda yozing.</p></div>
+            <button className="button button-primary hero-action" onClick={() => setActionSheetOpen(true)}><Plus size={19} />Yozuv qo'shish</button>
+          </section>
+
+          {notice && <div className={`notice ${notice.tone}`} role="status"><Check size={17} /><span>{notice.text}</span><button className="notice-close" onClick={() => setNotice(null)} aria-label="Xabarni yopish"><X size={16} /></button></div>}
+
+          <section className="stats-grid" aria-label="Umumiy qarz holati">
+            <StatCard label="Jami qoldiq" value={formatMoney(stats.totalOutstanding)} icon={<WalletCards size={17} />} foot="Faol qarzlar" />
+            <StatCard label="Kechikkan" value={formatMoney(stats.overdueAmount)} icon={<Clock3 size={17} />} foot="E'tibor kerak" footClass="warn" />
+            <StatCard label="Bu oy to'lov" value={formatMoney(stats.collectedThisMonth)} icon={<Check size={17} />} foot="Yig'ilgan summa" footClass="good" />
+            <StatCard label="Faol mijoz" value={String(stats.activeCustomers)} icon={<Users size={17} />} foot="Qoldig'i bor" />
           </section>
 
           {!liveMode && <div className="setup-note"><strong>Sinov ko'rinishi:</strong> haqiqiy ma'lumotlar uchun Supabase sxemasini ishga tushiring.</div>}
 
-          <section className="content-grid" id="customers">
-            <div className="panel"><div className="panel-heading"><div><div className="panel-title">Mijozlar</div><div className="panel-subtitle">Qarz qoldig'i bor mijozlar</div></div><button className="button button-ghost" aria-label="Sozlamalar"><Settings size={17} /></button></div><div className="search-wrap"><div style={{ position: "relative" }}><Search size={16} color="#6d7b73" style={{ position: "absolute", left: 12, top: 12 }} /><input className="search" style={{ paddingLeft: 37 }} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Mijoz izlash..." /></div></div><div className="customer-list">{filteredCustomers.length ? filteredCustomers.map((customer) => <CustomerRow customer={customer} key={customer.id} onAction={openQuickAction} />) : <div className="empty">Mijoz topilmadi.</div>}</div></div>
-            <div className="panel" id="payments"><div className="panel-heading"><div><div className="panel-title">So'nggi ishlar</div><div className="panel-subtitle">Daftardagi so'nggi o'zgarishlar</div></div><BookOpen size={17} color="#1e7a4f" /></div><div className="activity-list"><Activity text="Jasur Abduqodirovdan to'lov olindi" amount="450 000 so'm" time="Bugun, 09:42" /><Activity text="Dilshod Karimovga qarz yozildi" amount="1 250 000 so'm" time="2-avgust, 15:10" /><Activity text="Malika Tursunovaga eslatma yuborildi" amount="Muddat: 12-avgust" time="1-avgust, 10:25" /></div></div>
+          <section className="content-grid">
+            <div className="panel customers-panel" id="customers">
+              <div className="panel-heading"><div><div className="panel-title">Mijozlar</div><div className="panel-subtitle">Qoldig'i bor mijozlar</div></div><button className="button button-secondary panel-add" onClick={openAddCustomer}><Plus size={17} />Mijoz</button></div>
+              <div className="search-wrap"><div className="search-box"><Search size={17} aria-hidden="true" /><input className="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Mijoz qidirish..." aria-label="Mijoz qidirish" /></div></div>
+              <div className="customer-list">{filteredCustomers.length ? filteredCustomers.map((customer) => <CustomerRow customer={customer} key={customer.id} onAction={openQuickAction} onOpen={() => setSelectedCustomerId(customer.id)} />) : <div className="empty"><Users size={28} /><strong>Mijoz topilmadi.</strong><span>Boshqa ism yoki telefon bilan qidiring.</span><button className="button button-secondary" onClick={openAddCustomer}><Plus size={16} />Mijoz qo'shish</button></div>}</div>
+            </div>
+
+            <div className="panel activity-panel" id="activity">
+              <div className="panel-heading"><div><div className="panel-title">So'nggi ishlar</div><div className="panel-subtitle">Daftardagi oxirgi o'zgarishlar</div></div><BookOpen size={18} className="panel-icon" /></div>
+              <div className="activity-list">{liveMode ? <div className="empty compact"><BookOpen size={26} /><strong>Faoliyat shu yerda chiqadi.</strong><span>Yangi qarz yoki to'lov yozing.</span></div> : demoActivities.map((activity) => <Activity key={activity.text} {...activity} />)}</div>
+            </div>
           </section>
         </div>
       </main>
 
-      {modalOpen && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-labelledby="add-customer-title"><div className="modal-heading"><div><div className="eyebrow">Yangi yozuv</div><h2 id="add-customer-title">Mijoz qo'shish</h2></div><button className="button button-ghost" onClick={() => setModalOpen(false)} aria-label="Yopish"><X size={18} /></button></div><form onSubmit={addCustomer}><div className="field-grid"><div className="field full"><label htmlFor="name">Mijoz ismi *</label><input id="name" required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Masalan: Aziz Karimov" /></div><div className="field full"><label htmlFor="phone">Telefon</label><input id="phone" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} placeholder="+998 90 000 00 00" /></div><div className="field"><label htmlFor="amount">Qarz</label><input id="amount" type="number" min="0" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} placeholder="0" /></div><div className="field"><label htmlFor="dueDate">Muddat</label><input id="dueDate" type="date" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></div></div><div className="modal-actions"><button type="button" className="button button-ghost" onClick={() => setModalOpen(false)}>Bekor</button><button type="submit" className="button button-primary" disabled={saving}>{saving ? "Saqlanmoqda..." : "Saqlash"}</button></div></form></div></div>}
-      {quickAction && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-labelledby="quick-action-title"><div className="modal-heading"><div><div className="eyebrow">{quickAction.customer.name}</div><h2 id="quick-action-title">{quickAction.type === "credit" ? "Yangi qarz" : quickAction.type === "payment" ? "To'lov" : "Tahrir"}</h2></div><button className="button button-ghost" onClick={closeQuickAction} aria-label="Yopish"><X size={18} /></button></div><form onSubmit={submitQuickAction}><div className="field-grid">{quickAction.type === "edit" ? <><div className="field full"><label htmlFor="quick-name">Mijoz ismi</label><input id="quick-name" required value={quickForm.name} onChange={(event) => setQuickForm({ ...quickForm, name: event.target.value })} /></div><div className="field full"><label htmlFor="quick-phone">Telefon</label><input id="quick-phone" value={quickForm.phone} onChange={(event) => setQuickForm({ ...quickForm, phone: event.target.value })} /></div></> : <><div className="field full"><label htmlFor="quick-amount">{quickAction.type === "payment" ? `Qoldiq: ${formatMoney(quickAction.customer.balance)}` : "Summa"}</label><input id="quick-amount" type="number" min="0" max={quickAction.type === "payment" ? quickAction.customer.balance : undefined} required value={quickForm.amount} onChange={(event) => setQuickForm({ ...quickForm, amount: event.target.value })} /></div>{quickAction.type === "credit" && <div className="field"><label htmlFor="quick-due">Muddat</label><input id="quick-due" type="date" value={quickForm.dueDate} onChange={(event) => setQuickForm({ ...quickForm, dueDate: event.target.value })} /></div>}<div className="field full"><label htmlFor="quick-note">Izoh</label><input id="quick-note" value={quickForm.note} onChange={(event) => setQuickForm({ ...quickForm, note: event.target.value })} placeholder="Ixtiyoriy" /></div></>}</div>{quickError && <div className="setup-note">{quickError}</div>}<div className="modal-actions"><button type="button" className="button button-ghost" onClick={closeQuickAction}>Bekor</button><button type="submit" className="button button-primary" disabled={saving}>{saving ? "Saqlanmoqda..." : "Saqlash"}</button></div></form></div></div>}
+      <nav className="mobile-nav" aria-label="Mobil menyu">
+        <a className="mobile-nav-item active" href="#dashboard"><LayoutDashboard size={19} /><span>Bosh</span></a>
+        <a className="mobile-nav-item" href="#customers"><Users size={19} /><span>Mijozlar</span></a>
+        <a className="mobile-nav-item" href="#activity"><CircleDollarSign size={19} /><span>Faoliyat</span></a>
+        <button className="mobile-nav-item" onClick={() => setMoreOpen(true)}><Ellipsis size={19} /><span>Yana</span></button>
+      </nav>
+
+      {actionSheetOpen && <div className="sheet-backdrop" role="presentation" onClick={() => setActionSheetOpen(false)}><section className="sheet action-sheet" role="dialog" aria-modal="true" aria-labelledby="action-sheet-title" onClick={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="sheet-heading"><div><div className="eyebrow">Tezkor amal</div><h2 id="action-sheet-title">Nima yozamiz?</h2></div><button className="icon-button" onClick={() => setActionSheetOpen(false)} aria-label="Yopish"><X size={19} /></button></div><div className="sheet-options"><button className="sheet-option" onClick={() => openEntry("credit")}><span className="sheet-option-icon green"><Plus size={20} /></span><span><strong>+ Qarz</strong><small>Mijozga yangi qarz yozish</small></span><ChevronRight size={18} /></button><button className="sheet-option" onClick={() => openEntry("payment")}><span className="sheet-option-icon blue"><Check size={20} /></span><span><strong>- To'lov</strong><small>Mijozdan to'lov olish</small></span><ChevronRight size={18} /></button><button className="sheet-option" onClick={openAddCustomer}><span className="sheet-option-icon amber"><Users size={20} /></span><span><strong>+ Mijoz</strong><small>Yangi mijoz qo'shish</small></span><ChevronRight size={18} /></button></div></section></div>}
+
+      {entryType && <div className="modal-backdrop" role="presentation" onClick={closeEntry}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="entry-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Yangi yozuv</div><h2 id="entry-title">{entryType === "credit" ? "+ Qarz" : "- To'lov"}</h2></div><button className="icon-button" onClick={closeEntry} aria-label="Yopish"><X size={19} /></button></div><form onSubmit={submitEntry}><div className="field-grid"><div className="field full"><label htmlFor="entry-customer">Mijoz</label><div className="picker-input"><Search size={17} aria-hidden="true" /><input id="entry-customer" value={entryCustomerQuery} onChange={(event) => { setEntryCustomerQuery(event.target.value); setEntryForm((current) => ({ ...current, customerId: "" })); }} placeholder="Ism yoki telefon..." autoComplete="off" /></div>{!entryForm.customerId && <div className="customer-picker">{entryOptions.length ? entryOptions.map((customer) => <button type="button" className="picker-option" key={customer.id} onClick={() => chooseEntryCustomer(customer)}><span className="mini-avatar">{initials(customer.name)}</span><span><strong>{customer.name}</strong><small>{formatMoney(customer.balance)} qoldiq</small></span></button>) : <div className="picker-empty">Mijoz topilmadi.</div>}</div>}{entryCustomer && <div className="selected-customer"><span className="mini-avatar">{initials(entryCustomer.name)}</span><span><strong>{entryCustomer.name}</strong><small>{formatMoney(entryCustomer.balance)} qoldiq</small></span><button type="button" className="icon-button" onClick={() => { setEntryForm((current) => ({ ...current, customerId: "" })); setEntryCustomerQuery(""); }} aria-label="Mijozni almashtirish"><X size={16} /></button></div>}</div><div className="field full"><label htmlFor="entry-amount">Summa</label><div className="money-input"><input id="entry-amount" type="number" inputMode="decimal" min="1" max={entryType === "payment" && entryCustomer ? entryCustomer.balance : undefined} required value={entryForm.amount} onChange={(event) => setEntryForm({ ...entryForm, amount: event.target.value })} placeholder="0" /><span>so'm</span></div>{entryType === "payment" && entryCustomer && <button type="button" className="amount-shortcut" onClick={() => setEntryForm({ ...entryForm, amount: String(entryCustomer.balance) })}>Hammasini yopish · {formatMoney(entryCustomer.balance)}</button>}</div>{entryType === "credit" && <div className="field"><label htmlFor="entry-due">Muddat</label><div className="date-input"><CalendarDays size={17} aria-hidden="true" /><input id="entry-due" type="date" value={entryForm.dueDate} onChange={(event) => setEntryForm({ ...entryForm, dueDate: event.target.value })} /></div></div>}<div className="field full"><label htmlFor="entry-note">Izoh <span>(ixtiyoriy)</span></label><input id="entry-note" value={entryForm.note} onChange={(event) => setEntryForm({ ...entryForm, note: event.target.value })} placeholder="Masalan: un va yog'" /></div></div>{entryError && <div className="form-error" role="alert">{entryError}</div>}<div className="modal-actions"><button type="button" className="button button-ghost" onClick={closeEntry}>Bekor</button><button type="submit" className="button button-primary" disabled={saving}>{saving ? "Saqlanmoqda..." : "Saqlash"}</button></div></form></div></div>}
+
+      {modalOpen && <div className="modal-backdrop" role="presentation" onClick={closeAddCustomer}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="add-customer-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Yangi yozuv</div><h2 id="add-customer-title">Mijoz qo'shish</h2></div><button className="icon-button" onClick={closeAddCustomer} aria-label="Yopish"><X size={19} /></button></div><form onSubmit={addCustomer}><div className="field-grid"><div className="field full"><label htmlFor="name">Mijoz ismi <span>*</span></label><input id="name" required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Masalan: Aziz Karimov" autoComplete="name" /></div><div className="field full"><label htmlFor="phone">Telefon <span>(ixtiyoriy)</span></label><input id="phone" type="tel" inputMode="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} placeholder="+998 90 000 00 00" autoComplete="tel" /></div><div className="field"><label htmlFor="amount">Boshlang'ich qarz</label><div className="money-input"><input id="amount" type="number" inputMode="decimal" min="0" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} placeholder="0" /><span>so'm</span></div></div><div className="field"><label htmlFor="dueDate">Muddat</label><div className="date-input"><CalendarDays size={17} aria-hidden="true" /><input id="dueDate" type="date" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></div></div></div>{formError && <div className="form-error" role="alert">{formError}</div>}<div className="modal-actions"><button type="button" className="button button-ghost" onClick={closeAddCustomer}>Bekor</button><button type="submit" className="button button-primary" disabled={saving}>{saving ? "Saqlanmoqda..." : "Saqlash"}</button></div></form></div></div>}
+
+      {quickAction && <div className="modal-backdrop" role="presentation" onClick={closeQuickAction}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="quick-action-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">{quickAction.customer.name}</div><h2 id="quick-action-title">{quickAction.type === "credit" ? "+ Qarz" : quickAction.type === "payment" ? "- To'lov" : "Tahrir"}</h2></div><button className="icon-button" onClick={closeQuickAction} aria-label="Yopish"><X size={19} /></button></div><form onSubmit={submitQuickAction}><div className="field-grid">{quickAction.type === "edit" ? <><div className="field full"><label htmlFor="quick-name">Mijoz ismi <span>*</span></label><input id="quick-name" required value={quickForm.name} onChange={(event) => setQuickForm({ ...quickForm, name: event.target.value })} autoComplete="name" /></div><div className="field full"><label htmlFor="quick-phone">Telefon</label><input id="quick-phone" type="tel" inputMode="tel" value={quickForm.phone} onChange={(event) => setQuickForm({ ...quickForm, phone: event.target.value })} autoComplete="tel" /></div></> : <><div className="field full"><label htmlFor="quick-amount">Summa <span>· Qoldiq: {formatMoney(quickAction.customer.balance)}</span></label><div className="money-input"><input id="quick-amount" type="number" inputMode="decimal" min="1" max={quickAction.type === "payment" ? quickAction.customer.balance : undefined} required value={quickForm.amount} onChange={(event) => setQuickForm({ ...quickForm, amount: event.target.value })} placeholder="0" /><span>so'm</span></div>{quickAction.type === "payment" && <button type="button" className="amount-shortcut" onClick={() => setQuickForm({ ...quickForm, amount: String(quickAction.customer.balance) })}>Hammasini yopish</button>}</div>{quickAction.type === "credit" && <div className="field"><label htmlFor="quick-due">Muddat</label><div className="date-input"><CalendarDays size={17} aria-hidden="true" /><input id="quick-due" type="date" value={quickForm.dueDate} onChange={(event) => setQuickForm({ ...quickForm, dueDate: event.target.value })} /></div></div>}<div className="field full"><label htmlFor="quick-note">Izoh <span>(ixtiyoriy)</span></label><input id="quick-note" value={quickForm.note} onChange={(event) => setQuickForm({ ...quickForm, note: event.target.value })} placeholder="Masalan: qayta xarid" /></div></>}</div>{quickError && <div className="form-error" role="alert">{quickError}</div>}<div className="modal-actions"><button type="button" className="button button-ghost" onClick={closeQuickAction}>Bekor</button><button type="submit" className="button button-primary" disabled={saving || (quickAction.type === "payment" && quickAction.customer.balance <= 0)}>{saving ? "Saqlanmoqda..." : "Saqlash"}</button></div></form></div></div>}
+
+      {selectedCustomer && <div className="sheet-backdrop" role="presentation" onClick={() => setSelectedCustomerId(null)}><section className="sheet customer-sheet" role="dialog" aria-modal="true" aria-labelledby="customer-sheet-title" onClick={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="customer-sheet-head"><div className="customer-avatar large">{initials(selectedCustomer.name)}</div><div><h2 id="customer-sheet-title">{selectedCustomer.name}</h2><p>{selectedCustomer.phone}</p></div><button className="icon-button" onClick={() => setSelectedCustomerId(null)} aria-label="Yopish"><X size={19} /></button></div><div className="customer-balance"><span>Qoldiq</span><strong className="money">{formatMoney(selectedCustomer.balance)}</strong><span className={`status ${selectedCustomer.status}`}>{statusLabels[selectedCustomer.status]}</span></div><div className="customer-sheet-meta"><div><span>Muddat</span><strong>{formatDate(selectedCustomer.dueDate)}</strong></div><div><span>Oxirgi to'lov</span><strong>{selectedCustomer.lastPayment ? formatDate(selectedCustomer.lastPayment.slice(0, 10)) : "Hali yo'q"}</strong></div></div><div className="customer-sheet-actions"><button className="button button-secondary" onClick={() => openQuickAction("credit", selectedCustomer)}><Plus size={17} />Qarz</button><button className="button button-primary" onClick={() => openQuickAction("payment", selectedCustomer)} disabled={selectedCustomer.balance <= 0}><Check size={17} />To'lov</button><button className="button button-ghost" onClick={() => openQuickAction("edit", selectedCustomer)}><Ellipsis size={18} />Tahrir</button></div><div className="sheet-note"><BookOpen size={17} /><span>Har bir yangi qarz va to'lov mijoz tarixida saqlanadi.</span></div></section></div>}
+
+      {moreOpen && <div className="sheet-backdrop" role="presentation" onClick={() => setMoreOpen(false)}><section className="sheet small-sheet" role="dialog" aria-modal="true" aria-labelledby="more-title" onClick={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="sheet-heading"><div><div className="eyebrow">Qo'shimcha</div><h2 id="more-title">Yana</h2></div><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label="Yopish"><X size={19} /></button></div><div className="more-list"><div><Bell size={18} /><span><strong>Eslatmalar</strong><small>Tez orada</small></span></div><div><ArrowDownToLine size={18} /><span><strong>Hisobot</strong><small>Tez orada</small></span></div></div></section></div>}
     </div>
   );
 }
 
-function StatCard({ label, value, icon, foot, footClass = "" }: { label: string; value: string; icon: React.ReactNode; foot: string; footClass?: string }) { return <div className="stat-card"><div className="stat-label"><span>{label}</span><span className="stat-icon">{icon}</span></div><div className="stat-value">{value}</div><div className={`stat-foot ${footClass}`}>{foot}</div></div>; }
-function CustomerRow({ customer, onAction }: { customer: DashboardCustomer; onAction: (type: QuickAction, customer: DashboardCustomer) => void }) { return <div className="customer-row"><div><div className="customer-name">{customer.name}</div><div className="customer-phone">{customer.phone}</div></div><div><div className="row-label">Qoldiq</div><div className="row-value balance">{formatMoney(customer.balance)}</div></div><div><div className="row-label">Muddat</div><div className="row-value">{formatDate(customer.dueDate)}</div></div><div><div className="row-label">Holat</div><div className={`status ${customer.status}`}>{statusLabels[customer.status]}</div></div><div className="quick-actions"><button className="button button-secondary quick-action" onClick={() => onAction("credit", customer)} aria-label={`${customer.name}ga qarz qo'shish`}>+ Qarz</button><button className="button button-primary quick-action" onClick={() => onAction("payment", customer)} aria-label={`${customer.name}dan to'lov olish`}>- To'lov</button><button className="button button-ghost quick-action" onClick={() => onAction("edit", customer)} aria-label={`${customer.name}ni tahrirlash`}><Ellipsis size={16} /></button></div></div>; }
-function Activity({ text, amount, time }: { text: string; amount: string; time: string }) { return <div className="activity-item"><div className="activity-dot" /><div><div className="activity-text">{text}<br /><strong>{amount}</strong></div><div className="activity-time">{time}</div></div></div>; }
+function StatCard({ label, value, icon, foot, footClass = "" }: { label: string; value: string; icon: ReactNode; foot: string; footClass?: string }) {
+  return <div className="stat-card"><div className="stat-label"><span>{label}</span><span className="stat-icon">{icon}</span></div><div className="stat-value money">{value}</div><div className={`stat-foot ${footClass}`}>{foot}</div></div>;
+}
+
+function CustomerRow({ customer, onAction, onOpen }: { customer: DashboardCustomer; onAction: (type: QuickAction, customer: DashboardCustomer) => void; onOpen: () => void }) {
+  return <article className="customer-row"><button className="customer-main" onClick={onOpen} aria-label={`${customer.name} tafsilotlarini ochish`}><span className="customer-avatar">{initials(customer.name)}</span><span className="customer-main-copy"><strong className="customer-name">{customer.name}</strong><small className="customer-phone">{customer.phone}</small></span><ChevronRight size={17} className="customer-chevron" /></button><div className="customer-meta"><span>Qoldiq</span><strong className={`row-value money ${customer.balance > 0 && customer.status === "overdue" ? "balance-alert" : ""}`}>{formatMoney(customer.balance)}</strong></div><div className="customer-meta"><span>Muddat</span><strong className="row-value">{formatDate(customer.dueDate)}</strong></div><div className="customer-meta status-meta"><span>Holat</span><span className={`status ${customer.status}`}>{statusLabels[customer.status]}</span></div><div className="quick-actions"><button className="button button-secondary quick-action" onClick={() => onAction("credit", customer)} aria-label={`${customer.name}ga qarz qo'shish`}><Plus size={15} />Qarz</button><button className="button button-primary quick-action" onClick={() => onAction("payment", customer)} aria-label={`${customer.name}dan to'lov olish`} disabled={customer.balance <= 0}><Check size={15} />To'lov</button><button className="button button-ghost quick-action icon-action" onClick={() => onAction("edit", customer)} aria-label={`${customer.name}ni tahrirlash`}><Ellipsis size={17} /></button></div></article>;
+}
+
+function Activity({ text, amount, time, kind }: { text: string; amount: string; time: string; kind: string }) {
+  return <div className="activity-item"><div className={`activity-dot ${kind}`} /><div><div className="activity-text">{text}<br /><strong>{amount}</strong></div><div className="activity-time">{time}</div></div></div>;
+}
