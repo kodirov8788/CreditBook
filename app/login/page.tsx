@@ -4,6 +4,8 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { createClient, hasSupabaseEnv } from "@/lib/supabase/browser";
 
+const productionAppUrl = "https://g-p-6a7df7e8f1dc8191816ac81589324a2.vercel.app";
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
@@ -15,7 +17,7 @@ export default function LoginPage() {
     const supabase = createClient();
     if (!supabase) { setMessage("Kirish uchun Supabase sozlamasi kerak."); return; }
     setLoading(true);
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || window.location.origin).replace(/\/$/, "");
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || productionAppUrl).replace(/\/$/, "");
     const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${appUrl}/auth/callback` } });
     setMessage(error ? "Kirish havolasi yuborilmadi. Qayta urinib ko'ring." : "Kirish havolasi emailingizga yuborildi.");
     setLoading(false);
