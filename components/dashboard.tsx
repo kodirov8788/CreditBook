@@ -2,7 +2,7 @@
 /* Uzbek Latin text intentionally uses apostrophes in visible labels. */
 /* eslint-disable react/no-unescaped-entities */
 
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowDownToLine,
@@ -114,8 +114,19 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
   const [historySearch, setHistorySearch] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [activeSection, setActiveSection] = useState("dashboard");
   const supabase = hasSupabaseEnv() ? createClient() : null;
   const router = useRouter();
+
+  useEffect(() => {
+    function syncActiveSection() {
+      setActiveSection(window.location.hash.replace(/^#/, "") || "dashboard");
+    }
+
+    syncActiveSection();
+    window.addEventListener("hashchange", syncActiveSection);
+    return () => window.removeEventListener("hashchange", syncActiveSection);
+  }, []);
 
   const filteredCustomers = useMemo(() => customers.filter((customer) => `${customer.name} ${customer.phone}`.toLowerCase().includes(search.toLowerCase())), [customers, search]);
   const entryOptions = useMemo(() => {
@@ -453,11 +464,11 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
       <aside className="sidebar">
         <div className="brand"><div className="brand-mark">C</div><div className="brand-name">CreditBook</div></div>
         <nav className="nav-list" aria-label="Asosiy menyu">
-          <a className="nav-item active" href="#dashboard"><LayoutDashboard size={18} />Bosh sahifa</a>
-          <a className="nav-item" href="#customers"><Users size={18} />Mijozlar</a>
-          <a className="nav-item" href="#activity"><CircleDollarSign size={18} />Faoliyat</a>
-          <a className="nav-item" href="#more" onClick={() => setMoreOpen(true)}><Bell size={18} />Eslatmalar</a>
-          <a className="nav-item" href="#more" onClick={() => setMoreOpen(true)}><ArrowDownToLine size={18} />Hisobot</a>
+          <a className={`nav-item ${activeSection === "dashboard" ? "active" : ""}`} href="#dashboard"><LayoutDashboard size={18} />Bosh sahifa</a>
+          <a className={`nav-item ${activeSection === "customers" ? "active" : ""}`} href="#customers"><Users size={18} />Mijozlar</a>
+          <a className={`nav-item ${activeSection === "activity" ? "active" : ""}`} href="#activity"><CircleDollarSign size={18} />Faoliyat</a>
+          <a className={`nav-item ${activeSection === "more" ? "active" : ""}`} href="#more" onClick={() => { setActiveSection("more"); setMoreOpen(true); }}><Bell size={18} />Eslatmalar</a>
+          <a className={`nav-item ${activeSection === "more" ? "active" : ""}`} href="#more" onClick={() => { setActiveSection("more"); setMoreOpen(true); }}><ArrowDownToLine size={18} />Hisobot</a>
         </nav>
         <div className="sidebar-spacer" />
         <div className="shop-card"><div className="shop-label">Do'kon</div><div className="shop-name">Mahalla do'koni</div><div className="shop-owner">{userEmail ?? "Sinov rejimi"}</div></div>
@@ -504,9 +515,9 @@ export default function Dashboard({ initialCustomers, initialStats, userEmail, l
       </main>
 
       <nav className="mobile-nav" aria-label="Mobil menyu">
-        <a className="mobile-nav-item active" href="#dashboard"><LayoutDashboard size={19} /><span>Bosh</span></a>
-        <a className="mobile-nav-item" href="#customers"><Users size={19} /><span>Mijozlar</span></a>
-        <a className="mobile-nav-item" href="#activity"><CircleDollarSign size={19} /><span>Faoliyat</span></a>
+        <a className={`mobile-nav-item ${activeSection === "dashboard" ? "active" : ""}`} href="#dashboard"><LayoutDashboard size={19} /><span>Bosh</span></a>
+        <a className={`mobile-nav-item ${activeSection === "customers" ? "active" : ""}`} href="#customers"><Users size={19} /><span>Mijozlar</span></a>
+        <a className={`mobile-nav-item ${activeSection === "activity" ? "active" : ""}`} href="#activity"><CircleDollarSign size={19} /><span>Faoliyat</span></a>
         <button className="mobile-nav-item" onClick={() => setMoreOpen(true)}><Ellipsis size={19} /><span>Yana</span></button>
       </nav>
 
