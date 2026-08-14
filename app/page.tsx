@@ -49,7 +49,7 @@ export default async function Home() {
           const dueDate = debts.map((debt) => debt.due_date).filter(Boolean).sort()[0] ?? null;
           const lastPayment = debts.flatMap((debt) => debt.payments.map((payment) => payment.paid_at)).sort().at(-1) ?? null;
           const status = balance === 0 ? "paid" : dueDate && new Date(dueDate) < new Date() ? "overdue" : "on-track";
-          return { id: customer.id, name: customer.name, phone: customer.phone ?? "No phone added", balance, dueDate, status, lastPayment };
+          return { id: customer.id, name: customer.name, phone: customer.phone ?? "Telefon yo'q", balance, dueDate, status, lastPayment };
         });
         stats = { ...demoStats, activeCustomers: customers.filter((customer) => customer.balance > 0).length, totalOutstanding: customers.reduce((sum, customer) => sum + customer.balance, 0), overdueAmount: customers.filter((customer) => customer.status === "overdue").reduce((sum, customer) => sum + customer.balance, 0) };
       }
