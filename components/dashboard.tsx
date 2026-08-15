@@ -98,6 +98,8 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   const [moreView, setMoreView] = useState<MoreView>(initialView === "reminders" || initialView === "reports" ? initialView : null);
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
   const [reminderLoading, setReminderLoading] = useState(false);
+  const [reminderSaving, setReminderSaving] = useState(false);
+  const [reminderActionId, setReminderActionId] = useState<string | null>(null);
   const [reminderError, setReminderError] = useState("");
   const [reminderForm, setReminderForm] = useState({ customerId: "", scheduledFor: "", message: "", channel: "manual" });
   const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
@@ -107,6 +109,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   const [reportRange, setReportRange] = useState({ from: "", to: "" });
   const [expenseForm, setExpenseForm] = useState({ category: "", amount: "", spentAt: new Date().toISOString().slice(0, 10), vendor: "", note: "" });
   const [expenseError, setExpenseError] = useState("");
+  const [expenseSaving, setExpenseSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", amount: "", dueDate: "" });
   const [formError, setFormError] = useState("");
@@ -318,29 +321,39 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     }
     const isEditing = Boolean(editingReminderId);
     const url = isEditing ? `/api/reminders/${editingReminderId}` : "/api/reminders";
-    const response = await fetch(url, { method: isEditing ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customerId: reminderForm.customerId, scheduledFor: new Date(reminderForm.scheduledFor).toISOString(), message: reminderForm.message, channel: reminderForm.channel }) });
-    const payload = await response.json().catch(() => null) as { reminder?: ReminderItem; error?: string } | null;
-    if (!response.ok || !payload?.reminder) {
-      setReminderError(payload?.error || "Eslatma saqlanmadi.");
-      return;
+    setReminderSaving(true);
+    try {
+      const response = await fetch(url, { method: isEditing ? "PATCH" : "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customerId: reminderForm.customerId, scheduledFor: new Date(reminderForm.scheduledFor).toISOString(), message: reminderForm.message, channel: reminderForm.channel }) });
+      const payload = await response.json().catch(() => null) as { reminder?: ReminderItem; error?: string } | null;
+      if (!response.ok || !payload?.reminder) {
+        setReminderError(payload?.error || "Eslatma saqlanmadi.");
+        return;
+      }
+      setReminderForm({ customerId: "", scheduledFor: "", message: "", channel: "manual" });
+      setEditingReminderId(null);
+      setNotice({ tone: "success", text: isEditing ? "Eslatma yangilandi." : "Eslatma saqlandi." });
+      const customer = customers.find((item) => item.id === reminderForm.customerId);
+      void recordActivity(reminderForm.customerId, "reminder", `${customer?.name || "Mijoz"} uchun eslatma ${isEditing ? "yangilandi" : "saqlandi"}.`);
+      await loadReminders();
+    } finally {
+      setReminderSaving(false);
     }
-    setReminderForm({ customerId: "", scheduledFor: "", message: "", channel: "manual" });
-    setEditingReminderId(null);
-    setNotice({ tone: "success", text: isEditing ? "Eslatma yangilandi." : "Eslatma saqlandi." });
-    const customer = customers.find((item) => item.id === reminderForm.customerId);
-    void recordActivity(reminderForm.customerId, "reminder", `${customer?.name || "Mijoz"} uchun eslatma ${isEditing ? "yangilandi" : "saqlandi"}.`);
-    void loadReminders();
   }
 
   async function cancelReminder(id: string) {
-    const response = await fetch(`/api/reminders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "cancelled" }) });
-    if (!response.ok) {
-      setReminderError("Eslatma bekor qilinmadi.");
-      return;
+    setReminderActionId(id);
+    try {
+      const response = await fetch(`/api/reminders/${id}`, { method: "PATCH", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "cancelled" }) });
+      if (!response.ok) {
+        setReminderError("Eslatma bekor qilinmadi.");
+        return;
+      }
+      setReminders((current) => current.map((reminder) => reminder.id === id ? { ...reminder, status: "cancelled" } : reminder));
+      setNotice({ tone: "success", text: "Eslatma bekor qilindi." });
+      void recordActivity(null, "reminder", "Eslatma bekor qilindi.");
+    } finally {
+      setReminderActionId(null);
     }
-    setReminders((current) => current.map((reminder) => reminder.id === id ? { ...reminder, status: "cancelled" } : reminder));
-    setNotice({ tone: "success", text: "Eslatma bekor qilindi." });
-    void recordActivity(null, "reminder", "Eslatma bekor qilindi.");
   }
 
   function editReminder(reminder: ReminderItem) {
@@ -349,15 +362,20 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   }
 
   async function sendReminder(reminder: ReminderItem) {
-    const response = await fetch(`/api/reminders/${reminder.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "sent" }) });
-    const payload = await response.json().catch(() => null) as { reminder?: ReminderItem } | null;
-    if (!response.ok || !payload?.reminder) {
-      setReminderError("Eslatma yuborilgan deb belgilanmadi.");
-      return;
+    setReminderActionId(reminder.id);
+    try {
+      const response = await fetch(`/api/reminders/${reminder.id}`, { method: "PATCH", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "sent" }) });
+      const payload = await response.json().catch(() => null) as { reminder?: ReminderItem } | null;
+      if (!response.ok || !payload?.reminder) {
+        setReminderError("Eslatma yuborilgan deb belgilanmadi.");
+        return;
+      }
+      setReminders((current) => current.map((item) => item.id === reminder.id ? payload.reminder! : item));
+      setNotice({ tone: "success", text: "Eslatma yuborildi deb qayd qilindi." });
+      void recordActivity(reminder.customer_id, "reminder", `${reminder.customers?.name || "Mijoz"}ga eslatma yuborildi.`);
+    } finally {
+      setReminderActionId(null);
     }
-    setReminders((current) => current.map((item) => item.id === reminder.id ? payload.reminder! : item));
-    setNotice({ tone: "success", text: "Eslatma yuborildi deb qayd qilindi." });
-    void recordActivity(reminder.customer_id, "reminder", `${reminder.customers?.name || "Mijoz"}ga eslatma yuborildi.`);
   }
 
   async function loadReport(range: { from: string; to: string }) {
@@ -381,27 +399,37 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   async function saveExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setExpenseError("");
-    const response = await fetch("/api/expenses", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category: expenseForm.category, amount: Number(expenseForm.amount), spentAt: expenseForm.spentAt, vendor: expenseForm.vendor, note: expenseForm.note }) });
-    const payload = await response.json().catch(() => null) as { error?: string } | null;
-    if (!response.ok) {
-      setExpenseError(payload?.error || "Xarajat saqlanmadi.");
-      return;
+    setExpenseSaving(true);
+    try {
+      const response = await fetch("/api/expenses", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category: expenseForm.category, amount: Number(expenseForm.amount), spentAt: expenseForm.spentAt, vendor: expenseForm.vendor, note: expenseForm.note }) });
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) {
+        setExpenseError(payload?.error || "Xarajat saqlanmadi.");
+        return;
+      }
+      setExpenseForm({ category: "", amount: "", spentAt: new Date().toISOString().slice(0, 10), vendor: "", note: "" });
+      setNotice({ tone: "success", text: "Xarajat saqlandi." });
+      void recordActivity(null, "expense", `${expenseForm.category} uchun ${formatMoney(Number(expenseForm.amount))} xarajat yozildi.`);
+      await loadReport(reportRange);
+    } finally {
+      setExpenseSaving(false);
     }
-    setExpenseForm({ category: "", amount: "", spentAt: new Date().toISOString().slice(0, 10), vendor: "", note: "" });
-    setNotice({ tone: "success", text: "Xarajat saqlandi." });
-    void recordActivity(null, "expense", `${expenseForm.category} uchun ${formatMoney(Number(expenseForm.amount))} xarajat yozildi.`);
-    void loadReport(reportRange);
   }
 
   async function voidExpense(id: string) {
-    const response = await fetch(`/api/expenses/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ void: true, reason: "Foydalanuvchi tuzatishi" }) });
-    if (!response.ok) {
-      setExpenseError("Xarajat bekor qilinmadi.");
-      return;
+    setExpenseSaving(true);
+    try {
+      const response = await fetch(`/api/expenses/${id}`, { method: "PATCH", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ void: true, reason: "Foydalanuvchi tuzatishi" }) });
+      if (!response.ok) {
+        setExpenseError("Xarajat bekor qilinmadi.");
+        return;
+      }
+      setNotice({ tone: "success", text: "Xarajat bekor qilindi." });
+      void recordActivity(null, "expense", "Xarajat bekor qilindi.");
+      await loadReport(reportRange);
+    } finally {
+      setExpenseSaving(false);
     }
-    setNotice({ tone: "success", text: "Xarajat bekor qilindi." });
-    void recordActivity(null, "expense", "Xarajat bekor qilindi.");
-    void loadReport(reportRange);
   }
 
   async function recordActivity(customerId: string | null, eventType: string, description: string) {
@@ -716,22 +744,23 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
 
       {moreOpen && <div className="sheet-backdrop" role="presentation" onClick={() => setMoreOpen(false)}><section className="sheet small-sheet" role="dialog" aria-modal="true" aria-labelledby="more-title" onClick={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="sheet-heading"><div><div className="eyebrow">Qo'shimcha</div><h2 id="more-title">Yana</h2></div><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label="Yopish"><X size={19} /></button></div><div className="more-list"><button onClick={() => openMoreView("reminders")}><Bell size={18} /><span><strong>Eslatmalar</strong><small>Muddatlarni eslab qolish</small></span><ChevronRight size={17} /></button><button onClick={() => openMoreView("reports")}><ArrowDownToLine size={18} /><span><strong>Hisobot</strong><small>Qarz va to'lov tahlili</small></span><ChevronRight size={17} /></button></div></section></div>}
 
-      {moreView === "reminders" && <ReminderPanel reminders={reminders} customers={customers} loading={reminderLoading} error={reminderError} form={reminderForm} setForm={setReminderForm} editingId={editingReminderId} onSubmit={saveReminder} onEdit={editReminder} onCancel={cancelReminder} onSend={sendReminder} onClose={() => setMoreView(null)} onClear={() => { setEditingReminderId(null); setReminderForm({ customerId: "", scheduledFor: "", message: "", channel: "manual" }); }} />}
+      {moreView === "reminders" && <ReminderPanel reminders={reminders} customers={customers} loading={reminderLoading} saving={reminderSaving} actionId={reminderActionId} error={reminderError} form={reminderForm} setForm={setReminderForm} editingId={editingReminderId} onSubmit={saveReminder} onEdit={editReminder} onCancel={cancelReminder} onSend={sendReminder} onClose={() => setMoreView(null)} onClear={() => { setEditingReminderId(null); setReminderForm({ customerId: "", scheduledFor: "", message: "", channel: "manual" }); }} />}
 
-      {moreView === "reports" && <div className="modal-backdrop" role="presentation" onClick={() => setMoreView(null)}><div className="modal more-modal" role="dialog" aria-modal="true" aria-labelledby="reports-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Raqamlar</div><h2 id="reports-title">Hisobot</h2></div><button className="icon-button" onClick={() => setMoreView(null)} aria-label="Hisobotni yopish"><X size={19} /></button></div><ReportPanel report={report} reportLoading={reportLoading} reportError={reportError} reportRange={reportRange} setReportRange={setReportRange} expenseForm={expenseForm} setExpenseForm={setExpenseForm} expenseError={expenseError} onRefresh={() => void loadReport(reportRange)} onSaveExpense={saveExpense} onVoidExpense={voidExpense} /></div></div>}
+      {moreView === "reports" && <div className="modal-backdrop" role="presentation" onClick={() => setMoreView(null)}><div className="modal more-modal" role="dialog" aria-modal="true" aria-labelledby="reports-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Raqamlar</div><h2 id="reports-title">Hisobot</h2></div><button className="icon-button" onClick={() => setMoreView(null)} aria-label="Hisobotni yopish"><X size={19} /></button></div><ReportPanel report={report} reportLoading={reportLoading} reportError={reportError} reportRange={reportRange} setReportRange={setReportRange} expenseForm={expenseForm} setExpenseForm={setExpenseForm} expenseError={expenseError} expenseSaving={expenseSaving} onRefresh={() => void loadReport(reportRange)} onSaveExpense={saveExpense} onVoidExpense={voidExpense} /></div></div>}
     </div>
   );
 }
 
-function ReminderPanel({ reminders, customers, loading, error, form, setForm, editingId, onSubmit, onEdit, onCancel, onSend, onClose, onClear }: { reminders: ReminderItem[]; customers: DashboardCustomer[]; loading: boolean; error: string; form: { customerId: string; scheduledFor: string; message: string; channel: string }; setForm: Dispatch<SetStateAction<{ customerId: string; scheduledFor: string; message: string; channel: string }>>; editingId: string | null; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onEdit: (reminder: ReminderItem) => void; onCancel: (id: string) => void; onSend: (reminder: ReminderItem) => void; onClose: () => void; onClear: () => void }) {
-  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="modal more-modal" role="dialog" aria-modal="true" aria-labelledby="reminders-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Vaqtida eslatma</div><h2 id="reminders-title">Eslatmalar</h2></div><button className="icon-button" onClick={onClose} aria-label="Eslatmalarni yopish"><X size={19} /></button></div><form onSubmit={onSubmit}><div className="field-grid"><div className="field full"><label htmlFor="reminder-customer">Mijoz</label><select id="reminder-customer" required value={form.customerId} onChange={(event) => setForm({ ...form, customerId: event.target.value })}><option value="">Mijozni tanlang</option>{customers.filter((customer) => customer.balance > 0).map((customer) => <option key={customer.id} value={customer.id}>{customer.name} · {formatMoney(customer.balance)}</option>)}</select></div><div className="field"><label htmlFor="reminder-date">Eslatma vaqti</label><input id="reminder-date" required type="datetime-local" value={form.scheduledFor} onChange={(event) => setForm({ ...form, scheduledFor: event.target.value })} /></div><div className="field"><label htmlFor="reminder-channel">Kanal</label><select id="reminder-channel" value={form.channel} onChange={(event) => setForm({ ...form, channel: event.target.value })}><option value="manual">Manual</option><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select></div><div className="field full"><label htmlFor="reminder-message">Xabar <span>(ixtiyoriy)</span></label><input id="reminder-message" value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })} placeholder="Masalan: qarz muddatini eslatish" /></div></div>{error && <div className="form-error" role="alert">{error}</div>}<div className="modal-actions"><button type="button" className="button button-ghost" onClick={onClear}>Tozalash</button><button type="submit" className="button button-primary">{editingId ? "Eslatmani yangilash" : "Eslatma qo'shish"}</button></div></form><div className="reminder-list"><div className="section-label">Eslatmalar tarixi</div>{loading ? <div className="history-loading">Yuklanmoqda...</div> : reminders.length ? reminders.map((reminder) => <ReminderRow reminder={reminder} key={reminder.id} onEdit={onEdit} onCancel={onCancel} onSend={onSend} />) : <div className="history-empty compact-history"><Bell size={20} /><span>Eslatma yo'q.</span></div>}</div></div></div>;
+function ReminderPanel({ reminders, customers, loading, saving, actionId, error, form, setForm, editingId, onSubmit, onEdit, onCancel, onSend, onClose, onClear }: { reminders: ReminderItem[]; customers: DashboardCustomer[]; loading: boolean; saving: boolean; actionId: string | null; error: string; form: { customerId: string; scheduledFor: string; message: string; channel: string }; setForm: Dispatch<SetStateAction<{ customerId: string; scheduledFor: string; message: string; channel: string }>>; editingId: string | null; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onEdit: (reminder: ReminderItem) => void; onCancel: (id: string) => void; onSend: (reminder: ReminderItem) => void; onClose: () => void; onClear: () => void }) {
+  return <div className="modal-backdrop" role="presentation" onClick={onClose}><div className="modal more-modal" role="dialog" aria-modal="true" aria-labelledby="reminders-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Vaqtida eslatma</div><h2 id="reminders-title">Eslatmalar</h2></div><button className="icon-button" onClick={onClose} aria-label="Eslatmalarni yopish"><X size={19} /></button></div><form onSubmit={onSubmit}><div className="field-grid"><div className="field full"><label htmlFor="reminder-customer">Mijoz</label><select id="reminder-customer" required value={form.customerId} onChange={(event) => setForm({ ...form, customerId: event.target.value })}><option value="">Mijozni tanlang</option>{customers.filter((customer) => customer.balance > 0).map((customer) => <option key={customer.id} value={customer.id}>{customer.name} · {formatMoney(customer.balance)}</option>)}</select></div><div className="field"><label htmlFor="reminder-date">Eslatma vaqti</label><input id="reminder-date" required type="datetime-local" value={form.scheduledFor} onChange={(event) => setForm({ ...form, scheduledFor: event.target.value })} /></div><div className="field"><label htmlFor="reminder-channel">Kanal</label><select id="reminder-channel" value={form.channel} onChange={(event) => setForm({ ...form, channel: event.target.value })}><option value="manual">Manual</option><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select></div><div className="field full"><label htmlFor="reminder-message">Xabar <span>(ixtiyoriy)</span></label><input id="reminder-message" value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })} placeholder="Masalan: qarz muddatini eslatish" /></div></div>{error && <div className="form-error" role="alert">{error}</div>}<div className="modal-actions"><button type="button" className="button button-ghost" onClick={onClear}>Tozalash</button><button type="submit" className="button button-primary" disabled={saving}>{saving ? "Saqlanmoqda..." : editingId ? "Eslatmani yangilash" : "Eslatma qo'shish"}</button></div></form><div className="reminder-list"><div className="section-label">Eslatmalar tarixi</div>{loading ? <div className="history-loading">Yuklanmoqda...</div> : reminders.length ? reminders.map((reminder) => <ReminderRow reminder={reminder} key={reminder.id} onEdit={onEdit} onCancel={onCancel} onSend={onSend} actionId={actionId} />) : <div className="history-empty compact-history"><Bell size={20} /><span>Eslatma yo'q.</span></div>}</div></div></div>;
 }
 
-function ReminderRow({ reminder, onEdit, onCancel, onSend }: { reminder: ReminderItem; onEdit: (reminder: ReminderItem) => void; onCancel: (id: string) => void; onSend: (reminder: ReminderItem) => void }) {
+function ReminderRow({ reminder, onEdit, onCancel, onSend, actionId }: { reminder: ReminderItem; onEdit: (reminder: ReminderItem) => void; onCancel: (id: string) => void; onSend: (reminder: ReminderItem) => void; actionId: string | null }) {
   const phone = reminder.customers?.phone?.replace(/\D/g, "") || "";
   const message = reminder.message || "Qarz muddatini eslataman.";
   const statusLabel = reminder.status === "sent" ? "Yuborildi" : reminder.status === "failed" ? "Xato" : reminder.status === "cancelled" ? "Bekor" : "Kutilmoqda";
-  return <div className="reminder-item"><div><strong>{reminder.customers?.name || "Mijoz"} <span className={`reminder-status ${reminder.status}`}>{statusLabel}</span></strong><small>{reminder.scheduled_for ? formatHistoryDate(reminder.scheduled_for) : "Vaqt belgilanmagan"}{reminder.message ? ` · ${reminder.message}` : ""}{reminder.sent_at ? ` · ${formatHistoryDate(reminder.sent_at)} yuborildi` : ""}{reminder.error_reason ? ` · ${reminder.error_reason}` : ""}</small>{phone && <span className="reminder-links"><a href={`https://wa.me/${phone}?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer">WhatsApp</a><a href={`sms:${reminder.customers?.phone}?body=${encodeURIComponent(message)}`}>SMS</a></span>}</div><div className="reminder-actions">{reminder.status === "pending" && <><button className="text-button" onClick={() => onEdit(reminder)}>Tahrir</button><button className="text-button" onClick={() => onSend(reminder)}>Yuborildi</button><button className="text-button danger-text" onClick={() => onCancel(reminder.id)}>Bekor</button></>}{(reminder.status === "cancelled" || reminder.status === "failed") && <button className="text-button" onClick={() => onEdit(reminder)}>Qayta rejalash</button>}</div></div>;
+  const busy = actionId === reminder.id;
+  return <div className="reminder-item"><div><strong>{reminder.customers?.name || "Mijoz"} <span className={`reminder-status ${reminder.status}`}>{statusLabel}</span></strong><small>{reminder.scheduled_for ? formatHistoryDate(reminder.scheduled_for) : "Vaqt belgilanmagan"}{reminder.message ? ` · ${reminder.message}` : ""}{reminder.sent_at ? ` · ${formatHistoryDate(reminder.sent_at)} yuborildi` : ""}{reminder.error_reason ? ` · ${reminder.error_reason}` : ""}</small>{phone && <span className="reminder-links"><a href={`https://wa.me/${phone}?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer">WhatsApp</a><a href={`sms:${reminder.customers?.phone}?body=${encodeURIComponent(message)}`}>SMS</a></span>}</div><div className="reminder-actions">{reminder.status === "pending" && <><button className="text-button" onClick={() => onEdit(reminder)} disabled={busy}>Tahrir</button><button className="text-button" onClick={() => onSend(reminder)} disabled={busy}>{busy ? "..." : "Yuborildi"}</button><button className="text-button danger-text" onClick={() => onCancel(reminder.id)} disabled={busy}>{busy ? "..." : "Bekor"}</button></>}{(reminder.status === "cancelled" || reminder.status === "failed") && <button className="text-button" onClick={() => onEdit(reminder)} disabled={busy}>Qayta rejalash</button>}</div></div>;
 }
 
 function StatCard({ label, value, icon, foot, footClass = "" }: { label: string; value: string; icon: ReactNode; foot: string; footClass?: string }) {
@@ -743,16 +772,16 @@ function TransactionRow({ transaction, onReverse, reversing = false }: { transac
   return <article className={`history-row ${transaction.type} ${transaction.voided ? "voided" : ""}`}><span className={`history-type-icon ${transaction.type}`} aria-hidden="true">{isCredit ? <Plus size={16} /> : <Check size={16} />}</span><div className="history-row-copy"><div className="history-row-title"><strong>{transaction.description}</strong><span>{transaction.voided ? "Bekor qilingan" : isCredit ? "Qarz" : "To'lov"}</span></div><small>{formatHistoryDate(transaction.occurredAt)}{isCredit && transaction.dueDate ? ` · Muddat ${formatDate(transaction.dueDate)}` : ""}</small></div><div className="history-row-values"><strong className="money">{transaction.voided ? "Bekor" : `${isCredit ? "+" : "−"}${formatMoney(transaction.amount)}`}</strong><small>Qoldiq {formatMoney(transaction.balanceAfter)}</small></div>{onReverse && !transaction.voided && <button className="text-button history-reverse" onClick={() => onReverse(transaction)} disabled={reversing}>{reversing ? "..." : "Bekor qilish"}</button>}</article>;
 }
 
-function ReportPanel({ report, reportLoading, reportError, reportRange, setReportRange, expenseForm, setExpenseForm, expenseError, onRefresh, onSaveExpense, onVoidExpense }: { report: ReportData | null; reportLoading: boolean; reportError: string; reportRange: { from: string; to: string }; setReportRange: Dispatch<SetStateAction<{ from: string; to: string }>>; expenseForm: { category: string; amount: string; spentAt: string; vendor: string; note: string }; setExpenseForm: Dispatch<SetStateAction<{ category: string; amount: string; spentAt: string; vendor: string; note: string }>>; expenseError: string; onRefresh: () => void; onSaveExpense: (event: FormEvent<HTMLFormElement>) => void; onVoidExpense: (id: string) => void }) {
+function ReportPanel({ report, reportLoading, reportError, reportRange, setReportRange, expenseForm, setExpenseForm, expenseError, expenseSaving, onRefresh, onSaveExpense, onVoidExpense }: { report: ReportData | null; reportLoading: boolean; reportError: string; reportRange: { from: string; to: string }; setReportRange: Dispatch<SetStateAction<{ from: string; to: string }>>; expenseForm: { category: string; amount: string; spentAt: string; vendor: string; note: string }; setExpenseForm: Dispatch<SetStateAction<{ category: string; amount: string; spentAt: string; vendor: string; note: string }>>; expenseError: string; expenseSaving: boolean; onRefresh: () => void; onSaveExpense: (event: FormEvent<HTMLFormElement>) => void; onVoidExpense: (id: string) => void }) {
   const maxBar = Math.max(...(report?.monthly ?? []).flatMap((item) => [item.collected, item.expenses]), 1);
   return <>
-    <div className="report-filters"><div className="field"><label htmlFor="report-from">Boshlanish</label><input id="report-from" type="date" value={reportRange.from} onChange={(event) => setReportRange({ ...reportRange, from: event.target.value })} /></div><div className="field"><label htmlFor="report-to">Tugash</label><input id="report-to" type="date" value={reportRange.to} onChange={(event) => setReportRange({ ...reportRange, to: event.target.value })} /></div><button className="button button-secondary" onClick={onRefresh}>{reportLoading ? "..." : "Ko'rsatish"}</button></div>
+    <div className="report-filters"><div className="field"><label htmlFor="report-from">Boshlanish</label><input id="report-from" type="date" value={reportRange.from} onChange={(event) => setReportRange({ ...reportRange, from: event.target.value })} /></div><div className="field"><label htmlFor="report-to">Tugash</label><input id="report-to" type="date" value={reportRange.to} onChange={(event) => setReportRange({ ...reportRange, to: event.target.value })} /></div><button className="button button-secondary" onClick={onRefresh} disabled={reportLoading}>{reportLoading ? "Yuklanmoqda..." : "Ko'rsatish"}</button></div>
     {reportError && <div className="form-error" role="alert">{reportError}</div>}
     {report && <>
       <div className="report-grid"><StatCard label="Naqd tushum" value={formatMoney(report.collected)} icon={<Check size={17} />} foot="Faol to'lovlar" /><StatCard label="Xarajat" value={formatMoney(report.expensesTotal)} icon={<ArrowDownToLine size={17} />} foot="Faol xarajatlar" /><StatCard label="Sof cashflow" value={formatMoney(report.netCashflow)} icon={<WalletCards size={17} />} foot="Tushum − xarajat" /><StatCard label="Qoldiq qarz" value={formatMoney(report.outstanding)} icon={<Clock3 size={17} />} foot={`${report.overdueCount} ta kechikkan`} /><StatCard label="Yangi qarz" value={formatMoney(report.newCredits)} icon={<Plus size={17} />} foot="Receivable yozuvi" /></div>
       <section className="report-chart"><div className="section-label">Oylar bo'yicha cashflow</div>{report.monthly.length ? report.monthly.map((item) => <div className="chart-row" key={item.month}><strong>{item.month}</strong><div className="chart-bars"><span className="chart-bar income" style={{ width: `${Math.max((item.collected / maxBar) * 100, item.collected ? 3 : 0)}%` }} title={`Tushum ${formatMoney(item.collected)}`} /><span className="chart-bar expense" style={{ width: `${Math.max((item.expenses / maxBar) * 100, item.expenses ? 3 : 0)}%` }} title={`Xarajat ${formatMoney(item.expenses)}`} /></div><small>{formatMoney(item.netCashflow)}</small></div>) : <div className="history-empty compact-history">Bu davrda ma'lumot yo'q.</div>}<div className="chart-legend"><span className="income-dot" />Tushum <span className="expense-dot" />Xarajat</div></section>
-      <section className="expense-section"><div className="section-label">Xarajat qo'shish</div><form onSubmit={onSaveExpense}><div className="field-grid"><div className="field"><label htmlFor="expense-category">Tur</label><select id="expense-category" value={expenseForm.category} onChange={(event) => setExpenseForm({ ...expenseForm, category: event.target.value })}><option value="">Tanlang</option><option value="Tovar">Tovar</option><option value="Ijara">Ijara</option><option value="Transport">Transport</option><option value="Kommunal">Kommunal</option><option value="Boshqa">Boshqa</option></select></div><div className="field"><label htmlFor="expense-amount">Summa</label><input id="expense-amount" type="number" min="1" required value={expenseForm.amount} onChange={(event) => setExpenseForm({ ...expenseForm, amount: event.target.value })} placeholder="0" /></div><div className="field"><label htmlFor="expense-date">Sana</label><input id="expense-date" type="date" required value={expenseForm.spentAt} onChange={(event) => setExpenseForm({ ...expenseForm, spentAt: event.target.value })} /></div><div className="field"><label htmlFor="expense-vendor">Kimga <span>(ixtiyoriy)</span></label><input id="expense-vendor" value={expenseForm.vendor} onChange={(event) => setExpenseForm({ ...expenseForm, vendor: event.target.value })} placeholder="Yetkazuvchi" /></div><div className="field full"><label htmlFor="expense-note">Izoh <span>(ixtiyoriy)</span></label><input id="expense-note" value={expenseForm.note} onChange={(event) => setExpenseForm({ ...expenseForm, note: event.target.value })} placeholder="Masalan: do'kon ijara haqi" /></div></div>{expenseError && <div className="form-error" role="alert">{expenseError}</div>}<button className="button button-primary" type="submit">Xarajatni saqlash</button></form></section>
-      <section className="expense-section"><div className="section-label">Xarajatlar tarixi</div>{report.expenses.length ? report.expenses.map((expense) => <div className="reminder-item" key={expense.id}><div><strong>{expense.category} · {formatMoney(Number(expense.amount))}</strong><small>{expense.spent_at}{expense.vendor ? ` · ${expense.vendor}` : ""}{expense.note ? ` · ${expense.note}` : ""}</small></div><button className="text-button" onClick={() => onVoidExpense(expense.id)}>Bekor</button></div>) : <div className="history-empty compact-history">Xarajat yozilmagan.</div>}</section>
+      <section className="expense-section"><div className="section-label">Xarajat qo'shish</div><form onSubmit={onSaveExpense}><div className="field-grid"><div className="field"><label htmlFor="expense-category">Tur</label><select id="expense-category" value={expenseForm.category} onChange={(event) => setExpenseForm({ ...expenseForm, category: event.target.value })}><option value="">Tanlang</option><option value="Tovar">Tovar</option><option value="Ijara">Ijara</option><option value="Transport">Transport</option><option value="Kommunal">Kommunal</option><option value="Boshqa">Boshqa</option></select></div><div className="field"><label htmlFor="expense-amount">Summa</label><input id="expense-amount" type="number" min="1" required value={expenseForm.amount} onChange={(event) => setExpenseForm({ ...expenseForm, amount: event.target.value })} placeholder="0" /></div><div className="field"><label htmlFor="expense-date">Sana</label><input id="expense-date" type="date" required value={expenseForm.spentAt} onChange={(event) => setExpenseForm({ ...expenseForm, spentAt: event.target.value })} /></div><div className="field"><label htmlFor="expense-vendor">Kimga <span>(ixtiyoriy)</span></label><input id="expense-vendor" value={expenseForm.vendor} onChange={(event) => setExpenseForm({ ...expenseForm, vendor: event.target.value })} placeholder="Yetkazuvchi" /></div><div className="field full"><label htmlFor="expense-note">Izoh <span>(ixtiyoriy)</span></label><input id="expense-note" value={expenseForm.note} onChange={(event) => setExpenseForm({ ...expenseForm, note: event.target.value })} placeholder="Masalan: do'kon ijara haqi" /></div></div>{expenseError && <div className="form-error" role="alert">{expenseError}</div>}<button className="button button-primary" type="submit" disabled={expenseSaving}>{expenseSaving ? "Saqlanmoqda..." : "Xarajatni saqlash"}</button></form></section>
+      <section className="expense-section"><div className="section-label">Xarajatlar tarixi</div>{report.expenses.length ? report.expenses.map((expense) => <div className="reminder-item" key={expense.id}><div><strong>{expense.category} · {formatMoney(Number(expense.amount))}</strong><small>{expense.spent_at}{expense.vendor ? ` · ${expense.vendor}` : ""}{expense.note ? ` · ${expense.note}` : ""}</small></div><button className="text-button" onClick={() => onVoidExpense(expense.id)} disabled={expenseSaving}>{expenseSaving ? "..." : "Bekor"}</button></div>) : <div className="history-empty compact-history">Xarajat yozilmagan.</div>}</section>
     </>}
   </>;
 }
