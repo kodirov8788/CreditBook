@@ -160,6 +160,7 @@ select { width: 100%; min-height: 48px; border: 1px solid var(--line); border-ra
 .amount-shortcut { margin-top: 7px; border: 0; background: transparent; color: var(--green); padding: 0; font-size: 11px; font-weight: 800; }
 .form-error { margin-top: 16px; border: 1px solid #f0b8b5; border-radius: 10px; background: var(--red-bg); color: var(--red); padding: 11px 12px; font-size: 12px; line-height: 1.4; }
 .loading-shell, .error-shell { min-height: 100vh; display: grid; grid-template-columns: 1fr; place-items: center; padding: 24px; background: var(--paper); }
+.app-shell.loading-shell, .app-shell.error-shell { grid-template-columns: 1fr; }
 .loading-card { width: min(100%, 720px); padding: 28px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: 0 16px 42px rgba(28, 36, 43, .07); }
 .loading-card h1 { margin: 10px 0 8px; }
 .loading-bar { position: fixed; inset: 0 0 auto; height: 3px; background: linear-gradient(90deg, transparent, var(--green), transparent); animation: loading-sweep 1.2s ease-in-out infinite; }
