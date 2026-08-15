@@ -9,14 +9,18 @@ import { POST as createReminder } from "@/app/api/reminders/route";
 import { GET as getReport } from "@/app/api/reports/route";
 import { POST as createExpense } from "@/app/api/expenses/route";
 import { GET as getTeam, POST as inviteTeam } from "@/app/api/team/route";
+import { PATCH as updateTeamMember } from "@/app/api/team/[id]/route";
 import { createServiceClient } from "@/lib/admin";
+import { recordAudit } from "@/lib/audit";
 
 vi.mock("@/lib/api/auth", () => ({ getAuthenticatedClient: vi.fn(), requireShopPermission: vi.fn() }));
 vi.mock("@/lib/admin", () => ({ createServiceClient: vi.fn() }));
+vi.mock("@/lib/audit", () => ({ recordAudit: vi.fn() }));
 
 const authMock = vi.mocked(getAuthenticatedClient);
 const permissionMock = vi.mocked(requireShopPermission);
 const serviceClientMock = vi.mocked(createServiceClient);
+const auditMock = vi.mocked(recordAudit);
 
 function request(body: unknown, headers?: HeadersInit) {
   return new Request("http://localhost/api/test", {
@@ -35,6 +39,7 @@ describe("authenticated API contracts", () => {
     authMock.mockReset();
     permissionMock.mockReset();
     serviceClientMock.mockReset();
+    auditMock.mockReset();
     permissionMock.mockResolvedValue({ ok: true, shopId: "shop-1" });
   });
 
@@ -160,5 +165,18 @@ describe("authenticated API contracts", () => {
     const response = await inviteTeam(request({ email: "not-an-email", role: "cashier" }));
     expect(response.status).toBe(400);
     expect(serviceClientMock).not.toHaveBeenCalled();
+  });
+
+  it("does not allow the only shop owner to be suspended", async () => {
+    const currentQuery = { eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: { id: "membership-1", user_id: "owner-1", role: "shop_owner", status: "active" }, error: null }) };
+    const countQuery = { eq: vi.fn().mockReturnThis(), then: (resolve: (value: unknown) => unknown) => resolve({ count: 1, error: null }) };
+    const service = { from: vi.fn(() => ({ select: vi.fn((_fields: string, options?: unknown) => options ? countQuery : currentQuery) })) };
+    serviceClientMock.mockReturnValue(service as never);
+    authMock.mockResolvedValue({ supabase: { rpc: vi.fn() } as never, user: { id: "manager-1" } as never });
+
+    const response = await updateTeamMember(request({ status: "suspended" }), { params: Promise.resolve({ id: "membership-1" }) });
+
+    expect(response.status).toBe(400);
+    expect(auditMock).not.toHaveBeenCalled();
   });
 });

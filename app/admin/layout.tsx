@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LayoutDashboard, Store, Users, ShieldCheck } from "lucide-react";
+import { History, LayoutDashboard, Store, Users, ShieldCheck } from "lucide-react";
 import { requirePlatformAdmin } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +14,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
         <Link href="/admin" className="admin-nav-item"><LayoutDashboard size={17} />Umumiy</Link>
         <Link href="/admin/users" className="admin-nav-item"><Users size={17} />Foydalanuvchilar</Link>
         <Link href="/admin/shops" className="admin-nav-item"><Store size={17} />Do‘konlar</Link>
+        <Link href="/admin/audit" className="admin-nav-item"><History size={17} />Audit</Link>
       </nav>
       <div className="admin-sidebar-foot"><ShieldCheck size={16} /><span>{admin.user.email ?? "Platform admin"}</span></div>
     </aside>

@@ -4,6 +4,7 @@
   --line: #e3e9e4;
   --paper: #f7faf7;
   --panel: #ffffff;
+  --surface: #ffffff;
   --green: #1e7a4f;
   --green-dark: #125b39;
   --mint: #e3f5e9;
@@ -211,6 +212,21 @@ select { width: 100%; min-height: 48px; border: 1px solid var(--line); border-ra
 .admin-list-copy, .admin-user > span:last-child { display: grid; flex: 1; gap: 3px; min-width: 0; }
 .admin-list-copy strong, .admin-user strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-list-copy small, .admin-user small { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audit-list { display: grid; }
+.audit-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 11px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.audit-row:last-child { border-bottom: 0; }
+.audit-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: var(--mint); color: var(--green); }
+.audit-copy { display: grid; min-width: 0; gap: 4px; }
+.audit-copy strong, .audit-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audit-copy strong { font-size: 12px; }
+.audit-copy small, .audit-time { color: var(--muted); font-size: 10px; }
+.audit-time { white-space: nowrap; text-align: right; }
+.audit-secure { color: var(--green); }
+@media (max-width: 640px) {
+  .audit-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .audit-time { grid-column: 2 / -1; text-align: left; }
+  .audit-secure { display: none; }
+}
 .admin-status, .role-badge { display: inline-flex; align-items: center; width: fit-content; border-radius: 99px; padding: 5px 8px; font-size: 10px; font-weight: 800; white-space: nowrap; }
 .admin-status.active { background: #e4f4e9; color: #177344; }
 .admin-status.suspended { background: #f9e5e2; color: #a33d35; }

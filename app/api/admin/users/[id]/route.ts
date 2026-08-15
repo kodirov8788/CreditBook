@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { forbidden, serverError, unauthorized } from "@/lib/api/response";
 import { getPlatformAdmin } from "@/lib/admin";
+import { recordAudit } from "@/lib/audit";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -20,10 +21,12 @@ export async function PATCH(request: Request, context: Context) {
     }
     const { data, error } = await admin.client.from("shop_members").update({ role: body.role }).eq("shop_id", body.shopId).eq("user_id", id).select("id, role").single();
     if (error || !data) return serverError();
+    await recordAudit(admin.client, { actorUserId: admin.user.id, shopId: body.shopId, entityType: "membership", entityId: data.id, action: "membership.role_changed", metadata: { userId: id, role: body.role } });
     return NextResponse.json({ membership: data });
   }
   if (body?.status !== "active" && body?.status !== "suspended") return NextResponse.json({ error: "Account holati noto‘g‘ri." }, { status: 400 });
   const { data, error } = await admin.client.auth.admin.updateUserById(id, { ban_duration: body.status === "suspended" ? "876000h" : "none" });
   if (error || !data.user) return serverError();
+  await recordAudit(admin.client, { actorUserId: admin.user.id, entityType: "user", entityId: id, action: `user.${body.status === "suspended" ? "suspended" : "reactivated"}`, metadata: { status: body.status } });
   return NextResponse.json({ user: { id: data.user.id, bannedUntil: data.user.banned_until ?? null } });
 }
