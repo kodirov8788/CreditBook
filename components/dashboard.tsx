@@ -83,6 +83,27 @@ function formatToday() {
   return fullDateFormatter.format(new Date());
 }
 
+function localDateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function currentMonthRange() {
+  const now = new Date();
+  return { from: localDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)), to: localDateInputValue(now) };
+}
+
+function nextHourInputValue() {
+  const next = new Date();
+  next.setMinutes(0, 0, 0);
+  next.setHours(next.getHours() + 1);
+  const date = localDateInputValue(next);
+  const hours = String(next.getHours()).padStart(2, "0");
+  return `${date}T${hours}:00`;
+}
+
 function initials(value: string) {
   return value.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 }
@@ -101,13 +122,13 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   const [reminderSaving, setReminderSaving] = useState(false);
   const [reminderActionId, setReminderActionId] = useState<string | null>(null);
   const [reminderError, setReminderError] = useState("");
-  const [reminderForm, setReminderForm] = useState({ customerId: "", scheduledFor: "", message: "", channel: "manual" });
+  const [reminderForm, setReminderForm] = useState({ customerId: "", scheduledFor: nextHourInputValue(), message: "", channel: "manual" });
   const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
   const [report, setReport] = useState<ReportData | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
-  const [reportRange, setReportRange] = useState({ from: "", to: "" });
-  const [expenseForm, setExpenseForm] = useState({ category: "", amount: "", spentAt: new Date().toISOString().slice(0, 10), vendor: "", note: "" });
+  const [reportRange, setReportRange] = useState(currentMonthRange);
+  const [expenseForm, setExpenseForm] = useState({ category: "", amount: "", spentAt: localDateInputValue(), vendor: "", note: "" });
   const [expenseError, setExpenseError] = useState("");
   const [expenseSaving, setExpenseSaving] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -329,7 +350,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
         setReminderError(payload?.error || "Eslatma saqlanmadi.");
         return;
       }
-      setReminderForm({ customerId: "", scheduledFor: "", message: "", channel: "manual" });
+      setReminderForm({ customerId: "", scheduledFor: nextHourInputValue(), message: "", channel: "manual" });
       setEditingReminderId(null);
       setNotice({ tone: "success", text: isEditing ? "Eslatma yangilandi." : "Eslatma saqlandi." });
       const customer = customers.find((item) => item.id === reminderForm.customerId);
@@ -407,7 +428,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
         setExpenseError(payload?.error || "Xarajat saqlanmadi.");
         return;
       }
-      setExpenseForm({ category: "", amount: "", spentAt: new Date().toISOString().slice(0, 10), vendor: "", note: "" });
+      setExpenseForm({ category: "", amount: "", spentAt: localDateInputValue(), vendor: "", note: "" });
       setNotice({ tone: "success", text: "Xarajat saqlandi." });
       void recordActivity(null, "expense", `${expenseForm.category} uchun ${formatMoney(Number(expenseForm.amount))} xarajat yozildi.`);
       await loadReport(reportRange);
@@ -744,7 +765,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
 
       {moreOpen && <div className="sheet-backdrop" role="presentation" onClick={() => setMoreOpen(false)}><section className="sheet small-sheet" role="dialog" aria-modal="true" aria-labelledby="more-title" onClick={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="sheet-heading"><div><div className="eyebrow">Qo'shimcha</div><h2 id="more-title">Yana</h2></div><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label="Yopish"><X size={19} /></button></div><div className="more-list"><button onClick={() => openMoreView("reminders")}><Bell size={18} /><span><strong>Eslatmalar</strong><small>Muddatlarni eslab qolish</small></span><ChevronRight size={17} /></button><button onClick={() => openMoreView("reports")}><ArrowDownToLine size={18} /><span><strong>Hisobot</strong><small>Qarz va to'lov tahlili</small></span><ChevronRight size={17} /></button></div></section></div>}
 
-      {moreView === "reminders" && <ReminderPanel reminders={reminders} customers={customers} loading={reminderLoading} saving={reminderSaving} actionId={reminderActionId} error={reminderError} form={reminderForm} setForm={setReminderForm} editingId={editingReminderId} onSubmit={saveReminder} onEdit={editReminder} onCancel={cancelReminder} onSend={sendReminder} onClose={() => setMoreView(null)} onClear={() => { setEditingReminderId(null); setReminderForm({ customerId: "", scheduledFor: "", message: "", channel: "manual" }); }} />}
+      {moreView === "reminders" && <ReminderPanel reminders={reminders} customers={customers} loading={reminderLoading} saving={reminderSaving} actionId={reminderActionId} error={reminderError} form={reminderForm} setForm={setReminderForm} editingId={editingReminderId} onSubmit={saveReminder} onEdit={editReminder} onCancel={cancelReminder} onSend={sendReminder} onClose={() => setMoreView(null)} onClear={() => { setEditingReminderId(null); setReminderForm({ customerId: "", scheduledFor: nextHourInputValue(), message: "", channel: "manual" }); }} />}
 
       {moreView === "reports" && <div className="modal-backdrop" role="presentation" onClick={() => setMoreView(null)}><div className="modal more-modal" role="dialog" aria-modal="true" aria-labelledby="reports-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Raqamlar</div><h2 id="reports-title">Hisobot</h2></div><button className="icon-button" onClick={() => setMoreView(null)} aria-label="Hisobotni yopish"><X size={19} /></button></div><ReportPanel report={report} reportLoading={reportLoading} reportError={reportError} reportRange={reportRange} setReportRange={setReportRange} expenseForm={expenseForm} setExpenseForm={setExpenseForm} expenseError={expenseError} expenseSaving={expenseSaving} onRefresh={() => void loadReport(reportRange)} onSaveExpense={saveExpense} onVoidExpense={voidExpense} /></div></div>}
     </div>
