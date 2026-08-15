@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { badRequest, serverError, unauthorized } from "@/lib/api/response";
 import { getAuthenticatedClient } from "@/lib/api/auth";
 
-const reminderSelect = "id, customer_id, debt_id, channel, scheduled_for, sent_at, status, message, created_at, customers(name)";
+const reminderSelect = "id, customer_id, debt_id, channel, scheduled_for, sent_at, status, error_reason, message, created_at, customers(name, phone)";
 
 export async function GET(request: Request) {
   const { supabase, user } = await getAuthenticatedClient(request);
