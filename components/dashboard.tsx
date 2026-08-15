@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowDownToLine,
   Bell,
@@ -34,6 +35,7 @@ type QuickAction = "credit" | "payment" | "edit";
 type EntryType = "credit" | "payment";
 type HistoryFilter = "all" | "credit" | "payment";
 type MoreView = "reminders" | "reports" | null;
+type DashboardView = "dashboard" | "customers" | "activity" | "reminders" | "reports";
 type HistoryCredit = { id: string; title: string | null; principal: number; due_date: string | null; status: string; created_at: string };
 type HistoryPayment = { id: string; debt_id: string; amount: number; paid_at: string | null; note: string | null; created_at: string; voided_at: string | null; void_reason: string | null };
 type HistoryTransaction = { id: string; type: "credit" | "payment"; amount: number; description: string; occurredAt: string; dueDate: string | null; status: string | null; balanceAfter: number; voided: boolean };
@@ -82,7 +84,7 @@ function initials(value: string) {
   return value.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 }
 
-export default function Dashboard({ initialCustomers, initialStats, initialActivities, userEmail, shopName = "Mahalla do'koni", liveMode, initialError = "" }: { initialCustomers: DashboardCustomer[]; initialStats: DashboardStats; initialActivities: ActivityItem[]; userEmail: string | null; shopName?: string; liveMode: boolean; initialError?: string }) {
+export default function Dashboard({ initialCustomers, initialStats, initialActivities, userEmail, shopName = "Mahalla do'koni", liveMode, initialError = "", initialView = "dashboard", initialCustomerId }: { initialCustomers: DashboardCustomer[]; initialStats: DashboardStats; initialActivities: ActivityItem[]; userEmail: string | null; shopName?: string; liveMode: boolean; initialError?: string; initialView?: DashboardView; initialCustomerId?: string }) {
   const [customers, setCustomers] = useState(initialCustomers);
   const [stats, setStats] = useState(initialStats);
   const [activities, setActivities] = useState(initialActivities);
@@ -90,7 +92,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   const [modalOpen, setModalOpen] = useState(false);
   const [actionSheetOpen, setActionSheetOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  const [moreView, setMoreView] = useState<MoreView>(null);
+  const [moreView, setMoreView] = useState<MoreView>(initialView === "reminders" || initialView === "reports" ? initialView : null);
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
   const [reminderLoading, setReminderLoading] = useState(false);
   const [reminderError, setReminderError] = useState("");
@@ -110,29 +112,29 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   const [entryCustomerQuery, setEntryCustomerQuery] = useState("");
   const [entryError, setEntryError] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-  const [historyCustomerId, setHistoryCustomerId] = useState<string | null>(null);
+  const [historyCustomerId, setHistoryCustomerId] = useState<string | null>(initialCustomerId ?? null);
   const [historyTransactions, setHistoryTransactions] = useState<HistoryTransaction[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(Boolean(initialCustomerId && liveMode));
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [historySearch, setHistorySearch] = useState("");
   const [correctionId, setCorrectionId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [signingOut, setSigningOut] = useState(false);
-  const [activeSection, setActiveSection] = useState("dashboard");
+  const [activeSection, setActiveSection] = useState(initialView === "reminders" || initialView === "reports" ? "more" : initialView);
   const supabase = hasSupabaseEnv() ? createClient() : null;
   const router = useRouter();
 
   useEffect(() => {
     function syncActiveSection() {
-      setActiveSection(window.location.hash.replace(/^#/, "") || "dashboard");
+      setActiveSection(window.location.hash.replace(/^#/, "") || (initialView === "reminders" || initialView === "reports" ? "more" : initialView));
     }
 
     syncActiveSection();
     window.addEventListener("hashchange", syncActiveSection);
     return () => window.removeEventListener("hashchange", syncActiveSection);
-  }, []);
+  }, [initialView]);
 
   const filteredCustomers = useMemo(() => customers.filter((customer) => `${customer.name} ${customer.phone}`.toLowerCase().includes(search.toLowerCase())), [customers, search]);
   const entryOptions = useMemo(() => {
@@ -195,6 +197,10 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   }
 
   function openCustomerDetails(customer: DashboardCustomer) {
+    if (liveMode) {
+      router.push(`/customers/${customer.id}`);
+      return;
+    }
     setSelectedCustomerId(customer.id);
     setHistoryFilter("all");
     setHistorySearch("");
@@ -209,6 +215,15 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     setHistoryOpen(true);
     if (historyCustomerId !== customer.id) void loadCustomerHistory(customer);
   }
+
+  useEffect(() => {
+    if (!initialCustomerId || !liveMode) return;
+    const customer = customers.find((item) => item.id === initialCustomerId);
+    if (!customer) return;
+    queueMicrotask(() => void loadCustomerHistory(customer));
+    // The loader intentionally uses the current customer snapshot for the initial route.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers, initialCustomerId, liveMode]);
 
   function closeHistory() {
     setHistoryOpen(false);
@@ -574,11 +589,11 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
       <aside className="sidebar">
         <div className="brand"><div className="brand-mark">C</div><div className="brand-name">CreditBook</div></div>
         <nav className="nav-list" aria-label="Asosiy menyu">
-          <a className={`nav-item ${activeSection === "dashboard" ? "active" : ""}`} href="#dashboard"><LayoutDashboard size={18} />Bosh sahifa</a>
-          <a className={`nav-item ${activeSection === "customers" ? "active" : ""}`} href="#customers"><Users size={18} />Mijozlar</a>
-          <a className={`nav-item ${activeSection === "activity" ? "active" : ""}`} href="#activity"><CircleDollarSign size={18} />Faoliyat</a>
-          <button className={`nav-item nav-button ${moreView === "reminders" ? "active" : ""}`} onClick={() => { setActiveSection("more"); openMoreView("reminders"); }}><Bell size={18} />Eslatmalar</button>
-          <button className={`nav-item nav-button ${moreView === "reports" ? "active" : ""}`} onClick={() => { setActiveSection("more"); openMoreView("reports"); }}><ArrowDownToLine size={18} />Hisobot</button>
+          <Link className={`nav-item ${activeSection === "dashboard" ? "active" : ""}`} href="/dashboard"><LayoutDashboard size={18} />Bosh sahifa</Link>
+          <Link className={`nav-item ${activeSection === "customers" ? "active" : ""}`} href="/customers"><Users size={18} />Mijozlar</Link>
+          <Link className={`nav-item ${activeSection === "activity" ? "active" : ""}`} href="/activity"><CircleDollarSign size={18} />Faoliyat</Link>
+          <Link className={`nav-item ${moreView === "reminders" ? "active" : ""}`} href="/reminders"><Bell size={18} />Eslatmalar</Link>
+          <Link className={`nav-item ${moreView === "reports" ? "active" : ""}`} href="/reports"><ArrowDownToLine size={18} />Hisobot</Link>
         </nav>
         <div className="sidebar-spacer" />
         <div className="shop-card"><div className="shop-label">Do'kon</div><div className="shop-name">{shopName}</div><div className="shop-owner">{userEmail ?? "Sinov rejimi"}</div></div>
@@ -592,42 +607,42 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
         </header>
 
         <div className="page" id="dashboard">
-          <section className="hero">
+          {initialView === "dashboard" && <section className="hero">
             <div><div className="eyebrow">Bugun</div><h1>Qarzlar tayyor.</h1><p>Do'koningizdagi qoldiqni bir necha bosishda yozing.</p></div>
             <button className="button button-primary hero-action" onClick={() => setActionSheetOpen(true)}><Plus size={19} />Yozuv qo'shish</button>
-          </section>
+          </section>}
 
           {notice && <div className={`notice ${notice.tone}`} role="status"><Check size={17} /><span>{notice.text}</span><button className="notice-close" onClick={() => setNotice(null)} aria-label="Xabarni yopish"><X size={16} /></button></div>}
 
-          <section className="stats-grid" aria-label="Umumiy qarz holati">
+          {initialView === "dashboard" && <section className="stats-grid" aria-label="Umumiy qarz holati">
             <StatCard label="Jami qoldiq" value={formatMoney(stats.totalOutstanding)} icon={<WalletCards size={17} />} foot="Faol qarzlar" />
             <StatCard label="Kechikkan" value={formatMoney(stats.overdueAmount)} icon={<Clock3 size={17} />} foot="E'tibor kerak" footClass="warn" />
             <StatCard label="Bu oy to'lov" value={formatMoney(stats.collectedThisMonth)} icon={<Check size={17} />} foot="Yig'ilgan summa" footClass="good" />
             <StatCard label="Faol mijoz" value={String(stats.activeCustomers)} icon={<Users size={17} />} foot="Qoldig'i bor" />
-          </section>
+          </section>}
 
           {!liveMode && <div className="setup-note"><strong>Ulanish kerak:</strong> {initialError || "Supabase sozlamalarini kiriting."}</div>}
           {liveMode && initialError && <div className="setup-note"><strong>Ulanish holati:</strong> {initialError}</div>}
 
           <section className="content-grid">
-            <div className="panel customers-panel" id="customers">
+            {(initialView === "dashboard" || initialView === "customers") && <div className="panel customers-panel" id="customers">
               <div className="panel-heading"><div><div className="panel-title">Mijozlar</div><div className="panel-subtitle">Barcha mijozlar</div></div><button className="button button-secondary panel-add" onClick={openAddCustomer}><Plus size={17} />Mijoz</button></div>
               <div className="search-wrap"><div className="search-box"><Search size={17} aria-hidden="true" /><input className="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Mijoz qidirish..." aria-label="Mijoz qidirish" /></div></div>
               <div className="customer-list">{filteredCustomers.length ? filteredCustomers.map((customer) => <CustomerRow customer={customer} key={customer.id} onAction={openQuickAction} onOpen={() => openCustomerDetails(customer)} />) : <div className="empty"><Users size={28} /><strong>Mijoz topilmadi.</strong><span>Boshqa ism yoki telefon bilan qidiring.</span><button className="button button-secondary" onClick={openAddCustomer}><Plus size={16} />Mijoz qo'shish</button></div>}</div>
-            </div>
+            </div>}
 
-            <div className="panel activity-panel" id="activity">
+            {(initialView === "dashboard" || initialView === "activity") && <div className="panel activity-panel" id="activity">
               <div className="panel-heading"><div><div className="panel-title">So'nggi ishlar</div><div className="panel-subtitle">Daftardagi oxirgi o'zgarishlar</div></div><BookOpen size={18} className="panel-icon" /></div>
               <div className="activity-list">{activities.length ? activities.map((activity) => <ActivityRow activity={activity} key={activity.id} />) : <div className="empty compact"><BookOpen size={26} /><strong>{liveMode ? "Faoliyat shu yerda chiqadi." : "Supabase ulanishi kerak."}</strong><span>{liveMode ? "Yangi qarz yoki to'lov yozing." : "Haqiqiy ma'lumotlar uchun login qiling."}</span></div>}</div>
-            </div>
+            </div>}
           </section>
         </div>
       </main>
 
       <nav className="mobile-nav" aria-label="Mobil menyu">
-        <a className={`mobile-nav-item ${activeSection === "dashboard" ? "active" : ""}`} href="#dashboard"><LayoutDashboard size={19} /><span>Bosh</span></a>
-        <a className={`mobile-nav-item ${activeSection === "customers" ? "active" : ""}`} href="#customers"><Users size={19} /><span>Mijozlar</span></a>
-        <a className={`mobile-nav-item ${activeSection === "activity" ? "active" : ""}`} href="#activity"><CircleDollarSign size={19} /><span>Faoliyat</span></a>
+        <Link className={`mobile-nav-item ${activeSection === "dashboard" ? "active" : ""}`} href="/dashboard"><LayoutDashboard size={19} /><span>Bosh</span></Link>
+        <Link className={`mobile-nav-item ${activeSection === "customers" ? "active" : ""}`} href="/customers"><Users size={19} /><span>Mijozlar</span></Link>
+        <Link className={`mobile-nav-item ${activeSection === "activity" ? "active" : ""}`} href="/activity"><CircleDollarSign size={19} /><span>Faoliyat</span></Link>
         <button className="mobile-nav-item" onClick={() => setMoreOpen(true)}><Ellipsis size={19} /><span>Yana</span></button>
       </nav>
 
