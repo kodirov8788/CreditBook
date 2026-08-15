@@ -12,9 +12,38 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.shops (
+  id uuid primary key default gen_random_uuid(),
+  owner_user_id uuid not null references auth.users(id) on delete restrict,
+  name text not null check (char_length(trim(name)) >= 2),
+  status text not null default 'active' check (status in ('active', 'suspended')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.shop_members (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  role text not null default 'viewer' check (role in ('shop_owner', 'manager', 'cashier', 'accountant', 'viewer')),
+  status text not null default 'active' check (status in ('active', 'invited', 'suspended')),
+  invited_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (shop_id, user_id)
+);
+
+create table if not exists public.platform_roles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  role text not null check (role in ('platform_owner', 'platform_admin')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.customers (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  shop_id uuid references public.shops(id) on delete cascade,
   name text not null check (char_length(trim(name)) >= 2),
   phone text,
   address text,
@@ -26,6 +55,7 @@ create table if not exists public.customers (
 create table if not exists public.debts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  shop_id uuid references public.shops(id) on delete cascade,
   customer_id uuid not null references public.customers(id) on delete cascade,
   title text not null default 'Credit',
   principal numeric(14, 2) not null check (principal > 0),
@@ -39,6 +69,7 @@ create table if not exists public.debts (
 create table if not exists public.payments (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  shop_id uuid references public.shops(id) on delete cascade,
   customer_id uuid not null references public.customers(id) on delete cascade,
   debt_id uuid not null references public.debts(id) on delete cascade,
   amount numeric(14, 2) not null check (amount > 0),
@@ -52,6 +83,7 @@ create table if not exists public.payments (
 create table if not exists public.expenses (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  shop_id uuid references public.shops(id) on delete cascade,
   category text not null check (char_length(trim(category)) >= 2),
   amount numeric(14, 2) not null check (amount > 0),
   spent_at date not null default current_date,
@@ -66,6 +98,7 @@ create table if not exists public.expenses (
 create table if not exists public.reminders (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  shop_id uuid references public.shops(id) on delete cascade,
   customer_id uuid not null references public.customers(id) on delete cascade,
   debt_id uuid references public.debts(id) on delete cascade,
   channel text not null default 'manual' check (channel in ('manual', 'sms', 'whatsapp', 'email')),
@@ -80,6 +113,7 @@ create table if not exists public.reminders (
 create table if not exists public.activity_logs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  shop_id uuid references public.shops(id) on delete cascade,
   customer_id uuid references public.customers(id) on delete set null,
   event_type text not null,
   description text not null,
@@ -88,11 +122,18 @@ create table if not exists public.activity_logs (
 );
 
 create index if not exists customers_user_id_idx on public.customers(user_id);
+create index if not exists customers_shop_id_idx on public.customers(shop_id);
 create index if not exists debts_user_id_idx on public.debts(user_id);
+create index if not exists debts_shop_id_idx on public.debts(shop_id);
 create index if not exists debts_customer_id_idx on public.debts(customer_id);
 create index if not exists payments_debt_id_idx on public.payments(debt_id);
 create index if not exists expenses_user_spent_at_idx on public.expenses(user_id, spent_at desc);
+create index if not exists expenses_shop_id_idx on public.expenses(shop_id);
 create index if not exists reminders_scheduled_for_idx on public.reminders(scheduled_for) where status = 'pending';
+create index if not exists shops_owner_user_id_idx on public.shops(owner_user_id);
+create index if not exists shop_members_user_id_idx on public.shop_members(user_id);
+create index if not exists shop_members_shop_id_idx on public.shop_members(shop_id);
+create index if not exists platform_roles_role_idx on public.platform_roles(role);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -107,6 +148,12 @@ $$;
 
 drop trigger if exists profiles_set_updated_at on public.profiles;
 create trigger profiles_set_updated_at before update on public.profiles for each row execute function public.set_updated_at();
+drop trigger if exists shops_set_updated_at on public.shops;
+create trigger shops_set_updated_at before update on public.shops for each row execute function public.set_updated_at();
+drop trigger if exists shop_members_set_updated_at on public.shop_members;
+create trigger shop_members_set_updated_at before update on public.shop_members for each row execute function public.set_updated_at();
+drop trigger if exists platform_roles_set_updated_at on public.platform_roles;
+create trigger platform_roles_set_updated_at before update on public.platform_roles for each row execute function public.set_updated_at();
 drop trigger if exists customers_set_updated_at on public.customers;
 create trigger customers_set_updated_at before update on public.customers for each row execute function public.set_updated_at();
 drop trigger if exists debts_set_updated_at on public.debts;
@@ -117,10 +164,19 @@ returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
+declare
+  v_shop_id uuid;
 begin
   insert into public.profiles (id, full_name)
   values (new.id, coalesce(new.raw_user_meta_data->>'full_name', ''))
   on conflict (id) do nothing;
+
+  insert into public.shops (owner_user_id, name)
+  values (new.id, 'Mahalla do''koni')
+  returning id into v_shop_id;
+
+  insert into public.shop_members (shop_id, user_id, role, status, invited_by)
+  values (v_shop_id, new.id, 'shop_owner', 'active', new.id);
   return new;
 end;
 $$;
@@ -129,6 +185,9 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
 
 alter table public.profiles enable row level security;
+alter table public.shops enable row level security;
+alter table public.shop_members enable row level security;
+alter table public.platform_roles enable row level security;
 alter table public.customers enable row level security;
 alter table public.debts enable row level security;
 alter table public.payments enable row level security;
@@ -140,6 +199,13 @@ drop policy if exists "Users can view their profile" on public.profiles;
 create policy "Users can view their profile" on public.profiles for select using (id = auth.uid());
 drop policy if exists "Users can update their profile" on public.profiles;
 create policy "Users can update their profile" on public.profiles for update using (id = auth.uid()) with check (id = auth.uid());
+
+drop policy if exists "Owners can view their shops" on public.shops;
+create policy "Owners can view their shops" on public.shops for select to authenticated using (owner_user_id = auth.uid());
+drop policy if exists "Users can view their memberships" on public.shop_members;
+create policy "Users can view their memberships" on public.shop_members for select to authenticated using (user_id = auth.uid());
+drop policy if exists "Users can view their platform role" on public.platform_roles;
+create policy "Users can view their platform role" on public.platform_roles for select to authenticated using (user_id = auth.uid());
 
 drop policy if exists "Users own customers" on public.customers;
 create policy "Users own customers" on public.customers for all using (user_id = auth.uid()) with check (user_id = auth.uid());
