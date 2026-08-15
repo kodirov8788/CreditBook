@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextResponse } from "next/server";
 import { getAuthenticatedClient, requireShopPermission } from "@/lib/api/auth";
 import { POST as createCustomer } from "@/app/api/customers/route";
+import { GET as getCustomer, PATCH as updateCustomer } from "@/app/api/customers/[id]/route";
 import { POST as createCredit } from "@/app/api/customers/[id]/credits/route";
 import { POST as createPayment } from "@/app/api/customers/[id]/payments/route";
 import { GET as getActivity, POST as createActivity } from "@/app/api/activity/route";
@@ -63,6 +64,18 @@ describe("authenticated API contracts", () => {
     expect(customerResponse.status).toBe(400);
     expect(creditResponse.status).toBe(400);
     expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("protects customer details and validates customer edits", async () => {
+    authMock.mockResolvedValue({ supabase: null, user: null });
+    const unauthenticated = await getCustomer(new Request("http://localhost/api/customers/customer-1"), { params: Promise.resolve({ id: "customer-1" }) });
+    expect(unauthenticated.status).toBe(401);
+
+    const from = vi.fn();
+    authMock.mockResolvedValue({ supabase: { from } as never, user: { id: "user-1" } as never });
+    const invalid = await updateCustomer(request({ name: "A" }), { params: Promise.resolve({ id: "customer-1" }) });
+    expect(invalid.status).toBe(400);
+    expect(from).not.toHaveBeenCalled();
   });
 
   it("maps atomic payment overpayment errors to a safe client error", async () => {
