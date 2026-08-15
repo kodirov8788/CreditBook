@@ -7,6 +7,11 @@ test("login page renders the Uzbek entry flow", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Kirish havolasini yuborish" })).toBeVisible();
 });
 
+test("expired magic link shows a recovery message", async ({ page }) => {
+  await page.goto("/login?error_code=otp_expired");
+  await expect(page.getByText("Email havolasi eskirgan yoki avval ishlatilgan.")).toBeVisible();
+});
+
 test("home route responds successfully", async ({ page }) => {
   const response = await page.goto("/");
   expect(response?.status()).toBe(200);
