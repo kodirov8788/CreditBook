@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { badRequest, serverError, unauthorized } from "@/lib/api/response";
-import { getAuthenticatedClient } from "@/lib/api/auth";
+import { getAuthenticatedClient, requireShopPermission } from "@/lib/api/auth";
 
 const reminderSelect = "id, customer_id, debt_id, channel, scheduled_for, sent_at, status, error_reason, message, created_at, customers(name, phone)";
 
 export async function GET(request: Request) {
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
+  const access = await requireShopPermission(supabase, user, "reminder.read");
+  if (!access.ok) return access.response;
 
   const status = new URL(request.url).searchParams.get("status");
   let query = supabase.from("reminders").select(reminderSelect).order("scheduled_for", { ascending: true, nullsFirst: false });
@@ -19,6 +21,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
+  const access = await requireShopPermission(supabase, user, "reminder.create");
+  if (!access.ok) return access.response;
 
   const body = await request.json().catch(() => null) as { customerId?: string; debtId?: string | null; scheduledFor?: string; message?: string; channel?: string } | null;
   if (!body?.customerId || !body.scheduledFor) return badRequest("Mijoz va muddatni kiriting.");

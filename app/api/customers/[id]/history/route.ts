@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { serverError, unauthorized } from "@/lib/api/response";
-import { getAuthenticatedClient } from "@/lib/api/auth";
+import { getAuthenticatedClient, requireShopPermission } from "@/lib/api/auth";
 
 type Context = { params: Promise<{ id: string }> };
 type HistoryTransaction = { id: string; type: "credit" | "payment"; amount: number; description: string; occurredAt: string; dueDate: string | null; status: string | null; balanceAfter: number };
@@ -9,6 +9,8 @@ export async function GET(request: Request, context: Context) {
   const { id } = await context.params;
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
+  const access = await requireShopPermission(supabase, user, "customer.read");
+  if (!access.ok) return access.response;
 
   const [{ data: credits, error: creditError }, { data: payments, error: paymentError }] = await Promise.all([
     supabase.from("debts").select("id, title, principal, due_date, status, created_at").eq("customer_id", id).order("created_at", { ascending: false }),

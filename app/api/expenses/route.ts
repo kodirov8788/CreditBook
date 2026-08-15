@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { badRequest, serverError, unauthorized } from "@/lib/api/response";
-import { getAuthenticatedClient } from "@/lib/api/auth";
+import { getAuthenticatedClient, requireShopPermission } from "@/lib/api/auth";
 
 const expenseSelect = "id, category, amount, spent_at, vendor, note, payment_method, voided_at, void_reason, created_at";
 
 export async function GET(request: Request) {
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
+  const access = await requireShopPermission(supabase, user, "expense.read");
+  if (!access.ok) return access.response;
   const params = new URL(request.url).searchParams;
   let query = supabase.from("expenses").select(expenseSelect).order("spent_at", { ascending: false });
   if (params.get("from")) query = query.gte("spent_at", params.get("from")!);
@@ -19,6 +21,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
+  const access = await requireShopPermission(supabase, user, "expense.create");
+  if (!access.ok) return access.response;
   const body = await request.json().catch(() => null) as { category?: string; amount?: number; spentAt?: string; vendor?: string; note?: string; paymentMethod?: string } | null;
   const category = body?.category?.trim();
   const amount = body?.amount ?? 0;

@@ -4,6 +4,10 @@ export function unauthorized() {
   return NextResponse.json({ error: "Kirish talab qilinadi." }, { status: 401 });
 }
 
+export function forbidden() {
+  return NextResponse.json({ error: "Bu amal uchun ruxsat yo'q." }, { status: 403 });
+}
+
 export function badRequest(message: string) {
   return NextResponse.json({ error: message }, { status: 400 });
 }

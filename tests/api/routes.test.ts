@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getAuthenticatedClient } from "@/lib/api/auth";
+import { NextResponse } from "next/server";
+import { getAuthenticatedClient, requireShopPermission } from "@/lib/api/auth";
 import { POST as createCustomer } from "@/app/api/customers/route";
 import { POST as createCredit } from "@/app/api/customers/[id]/credits/route";
 import { POST as createPayment } from "@/app/api/customers/[id]/payments/route";
@@ -8,9 +9,10 @@ import { POST as createReminder } from "@/app/api/reminders/route";
 import { GET as getReport } from "@/app/api/reports/route";
 import { POST as createExpense } from "@/app/api/expenses/route";
 
-vi.mock("@/lib/api/auth", () => ({ getAuthenticatedClient: vi.fn() }));
+vi.mock("@/lib/api/auth", () => ({ getAuthenticatedClient: vi.fn(), requireShopPermission: vi.fn() }));
 
 const authMock = vi.mocked(getAuthenticatedClient);
+const permissionMock = vi.mocked(requireShopPermission);
 
 function request(body: unknown, headers?: HeadersInit) {
   return new Request("http://localhost/api/test", {
@@ -27,6 +29,8 @@ function rpcClient(result: { data: unknown; error: unknown }) {
 describe("authenticated API contracts", () => {
   beforeEach(() => {
     authMock.mockReset();
+    permissionMock.mockReset();
+    permissionMock.mockResolvedValue({ ok: true, shopId: "shop-1" });
   });
 
   it("rejects customer creation without authentication", async () => {
@@ -119,6 +123,17 @@ describe("authenticated API contracts", () => {
     const response = await createExpense(request({ category: "", amount: 100 }));
 
     expect(response.status).toBe(400);
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when the authenticated role lacks a permission", async () => {
+    const supabase = { from: vi.fn() };
+    authMock.mockResolvedValue({ supabase: supabase as never, user: { id: "user-1" } as never });
+    permissionMock.mockResolvedValue({ ok: false, response: NextResponse.json({ error: "Bu amal uchun ruxsat yo'q." }, { status: 403 }) });
+
+    const response = await createExpense(request({ category: "Ijara", amount: 100 }));
+
+    expect(response.status).toBe(403);
     expect(supabase.from).not.toHaveBeenCalled();
   });
 });

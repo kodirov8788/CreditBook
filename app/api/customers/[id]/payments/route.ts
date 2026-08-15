@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { badRequest, serverError, unauthorized } from "@/lib/api/response";
-import { getAuthenticatedClient } from "@/lib/api/auth";
+import { getAuthenticatedClient, requireShopPermission } from "@/lib/api/auth";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -8,6 +8,8 @@ export async function GET(request: Request, context: Context) {
   const { id } = await context.params;
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
+  const access = await requireShopPermission(supabase, user, "payment.read");
+  if (!access.ok) return access.response;
   const { data, error } = await supabase.from("payments").select("id, debt_id, amount, paid_at, note, created_at, voided_at, void_reason").eq("customer_id", id).order("paid_at", { ascending: false });
   if (error) return serverError();
   return NextResponse.json({ payments: data });
@@ -17,6 +19,8 @@ export async function POST(request: Request, context: Context) {
   const { id } = await context.params;
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
+  const access = await requireShopPermission(supabase, user, "payment.create");
+  if (!access.ok) return access.response;
   const body = await request.json().catch(() => null) as { amount?: number; note?: string } | null;
   const amount = body?.amount ?? 0;
   if (!Number.isFinite(amount) || amount <= 0) return badRequest("To'lov summasini kiriting.");
