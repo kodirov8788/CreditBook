@@ -20,7 +20,7 @@ export default async function Home() {
 
   const { data, error } = await supabase
     .from("customers")
-    .select("id, name, phone, debts(id, principal, due_date, status, payments(amount, paid_at))")
+    .select("id, name, phone, debts(id, principal, due_date, status, payments(amount, paid_at, voided_at))")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -34,21 +34,22 @@ export default async function Home() {
       principal: number;
       due_date: string | null;
       status: string;
-      payments: Array<{ amount: number; paid_at: string }>;
+      payments: Array<{ amount: number; paid_at: string; voided_at: string | null }>;
     }>;
-    const balance = debts.reduce((sum, debt) => {
-      const paid = debt.payments.reduce((paymentSum, payment) => paymentSum + Number(payment.amount), 0);
+    const activeDebts = debts.filter((debt) => debt.status !== "cancelled");
+    const balance = activeDebts.reduce((sum, debt) => {
+      const paid = debt.payments.filter((payment) => !payment.voided_at).reduce((paymentSum, payment) => paymentSum + Number(payment.amount), 0);
       return sum + Math.max(Number(debt.principal) - paid, 0);
     }, 0);
-    const dueDate = debts.map((debt) => debt.due_date).filter(Boolean).sort()[0] ?? null;
-    const lastPayment = debts.flatMap((debt) => debt.payments.map((payment) => payment.paid_at)).sort().at(-1) ?? null;
+    const dueDate = activeDebts.map((debt) => debt.due_date).filter(Boolean).sort()[0] ?? null;
+    const lastPayment = activeDebts.flatMap((debt) => debt.payments.filter((payment) => !payment.voided_at).map((payment) => payment.paid_at)).sort().at(-1) ?? null;
     const status = getCustomerStatus(balance, dueDate);
     return { id: customer.id, name: customer.name, phone: customer.phone ?? "Telefon yo'q", balance, dueDate, status, lastPayment };
   });
   const monthPrefix = new Date().toISOString().slice(0, 7);
   const collectedThisMonth = (data ?? []).reduce((sum, customer) => {
-    const debts = (customer.debts ?? []) as Array<{ payments: Array<{ amount: number; paid_at: string | null }> }>;
-    return sum + debts.flatMap((debt) => debt.payments).filter((payment) => payment.paid_at?.slice(0, 7) === monthPrefix).reduce((paymentSum, payment) => paymentSum + Number(payment.amount), 0);
+    const debts = (customer.debts ?? []) as Array<{ status: string; payments: Array<{ amount: number; paid_at: string | null; voided_at: string | null }> }>;
+    return sum + debts.filter((debt) => debt.status !== "cancelled").flatMap((debt) => debt.payments).filter((payment) => !payment.voided_at && payment.paid_at?.slice(0, 7) === monthPrefix).reduce((paymentSum, payment) => paymentSum + Number(payment.amount), 0);
   }, 0);
   const stats: DashboardStats = {
     totalOutstanding: customers.reduce((sum, customer) => sum + customer.balance, 0),

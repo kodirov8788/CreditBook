@@ -8,7 +8,7 @@ export async function GET(request: Request, context: Context) {
   const { id } = await context.params;
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
-  const { data, error } = await supabase.from("debts").select("id, title, principal, due_date, status, notes, created_at, updated_at, payments(id, amount, paid_at, note)").eq("customer_id", id).order("created_at", { ascending: false });
+  const { data, error } = await supabase.from("debts").select("id, title, principal, due_date, status, notes, created_at, updated_at, payments(id, amount, paid_at, note, voided_at, void_reason)").eq("customer_id", id).order("created_at", { ascending: false });
   if (error) return serverError();
   return NextResponse.json({ credits: data });
 }
