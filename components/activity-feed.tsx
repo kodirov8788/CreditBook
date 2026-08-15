@@ -14,6 +14,24 @@ function formatActivityDate(value: string) {
   return new Intl.DateTimeFormat("uz-UZ", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
 
+function localDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function currentMonthFilters(): ActivityFilters {
+  const today = new Date();
+  return {
+    q: "",
+    eventType: "all",
+    customerId: "all",
+    from: localDateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)),
+    to: localDateInputValue(today),
+  };
+}
+
 function buildQuery(filters: ActivityFilters, page: number) {
   const params = new URLSearchParams({ page: String(page), pageSize: "50" });
   if (filters.q.trim()) params.set("q", filters.q.trim());
@@ -53,7 +71,11 @@ export default function ActivityFeed({ initialActivities, customers, liveMode }:
 
   useEffect(() => {
     if (!liveMode) return;
-    const timer = window.setTimeout(() => void load(1, filters), 0);
+    const timer = window.setTimeout(() => {
+      const defaults = currentMonthFilters();
+      setFilters(defaults);
+      void load(1, defaults);
+    }, 0);
     return () => window.clearTimeout(timer);
     // Load once for the authenticated activity page; filter changes are submitted explicitly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
