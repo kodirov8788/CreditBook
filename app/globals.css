@@ -85,7 +85,8 @@ h2 { margin: 0; font-size: 24px; line-height: 1.15; }
 .search-box > svg, .picker-input > svg, .date-input > svg { position: absolute; left: 13px; color: var(--muted); pointer-events: none; }
 .search, .field input { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 10px; background: white; color: var(--ink); padding: 12px 13px; outline: none; }
 .search { padding-left: 40px; }
-.field input:focus, .search:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(30,122,79,.12); }
+.field input:focus, .search:focus, select:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(30,122,79,.12); }
+select { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 10px; background: white; color: var(--ink); padding: 12px 13px; outline: none; }
 .customer-list { display: grid; }
 .customer-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; border-bottom: 1px solid var(--line); }
 .customer-row:last-child { border-bottom: 0; }
@@ -127,6 +128,7 @@ h2 { margin: 0; font-size: 24px; line-height: 1.15; }
 .mobile-nav { position: fixed; right: 0; bottom: 0; left: 0; z-index: 10; display: grid; grid-template-columns: repeat(4, 1fr); padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: rgba(255,255,255,.97); box-shadow: 0 -5px 18px rgba(31,68,48,.08); }
 .mobile-nav-item { min-height: 48px; border: 0; border-radius: 11px; background: transparent; color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10px; text-decoration: none; }
 .mobile-nav-item.active { color: var(--green); background: var(--mint); font-weight: 800; }
+.nav-button { border: 0; background: transparent; text-align: left; }
 
 .modal-backdrop, .sheet-backdrop { position: fixed; inset: 0; z-index: 20; background: rgba(18,61,42,.36); }
 .modal-backdrop { display: flex; align-items: flex-end; justify-content: center; padding: 0; }
@@ -159,6 +161,19 @@ h2 { margin: 0; font-size: 24px; line-height: 1.15; }
 .sheet-option-icon.green { color: var(--green); background: var(--mint); }
 .sheet-option-icon.blue { color: var(--blue); background: var(--blue-bg); }
 .sheet-option-icon.amber { color: var(--amber); background: var(--amber-bg); }
+.more-list > button { display: flex; align-items: center; gap: 11px; width: 100%; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: white; color: var(--ink); text-align: left; }
+.more-list > button > span { flex: 1; display: grid; gap: 3px; }
+.more-list > button > svg { color: var(--green); }
+.more-modal { max-width: 620px; }
+.section-label { margin: 24px 0 9px; color: var(--muted); font-size: 11px; font-weight: 800; }
+.reminder-list { display: grid; gap: 8px; }
+.reminder-item { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 11px; padding: 11px 12px; }
+.reminder-item > div { min-width: 0; flex: 1; display: grid; gap: 4px; }
+.reminder-item strong { font-size: 12px; }
+.reminder-item small { color: var(--muted); font-size: 10px; line-height: 1.35; }
+.report-filters { display: grid; grid-template-columns: 1fr; gap: 10px; align-items: end; margin-top: 22px; }
+.report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+.report-grid .stat-card:last-child { grid-column: 1 / -1; }
 .customer-picker { display: grid; gap: 6px; margin-top: 8px; }
 .picker-input > input { padding-left: 40px; }
 .picker-option, .selected-customer { min-height: 50px; width: 100%; border: 1px solid var(--line); border-radius: 10px; background: white; display: flex; align-items: center; gap: 9px; padding: 8px 10px; text-align: left; }

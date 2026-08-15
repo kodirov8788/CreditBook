@@ -33,9 +33,12 @@ const statusLabels = { overdue: "Kechikkan", "due-soon": "Yaqin", "on-track": "V
 type QuickAction = "credit" | "payment" | "edit";
 type EntryType = "credit" | "payment";
 type HistoryFilter = "all" | "credit" | "payment";
+type MoreView = "reminders" | "reports" | null;
 type HistoryCredit = { id: string; title: string | null; principal: number; due_date: string | null; status: string; created_at: string };
 type HistoryPayment = { id: string; debt_id: string; amount: number; paid_at: string | null; note: string | null; created_at: string; voided_at: string | null; void_reason: string | null };
 type HistoryTransaction = { id: string; type: "credit" | "payment"; amount: number; description: string; occurredAt: string; dueDate: string | null; status: string | null; balanceAfter: number; voided: boolean };
+type ReminderItem = { id: string; customer_id: string; scheduled_for: string | null; status: string; message: string | null; customers?: { name?: string } | null };
+type ReportData = { from: string | null; to: string | null; newCredits: number; collected: number; outstanding: number; overdueAmount: number; overdueCount: number; activeCustomers: number };
 type ActivityItem = { id: string; customer_id: string | null; event_type: string; description: string; created_at: string };
 type Notice = { tone: "success" | "info"; text: string } | null;
 
@@ -87,6 +90,15 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   const [modalOpen, setModalOpen] = useState(false);
   const [actionSheetOpen, setActionSheetOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [moreView, setMoreView] = useState<MoreView>(null);
+  const [reminders, setReminders] = useState<ReminderItem[]>([]);
+  const [reminderLoading, setReminderLoading] = useState(false);
+  const [reminderError, setReminderError] = useState("");
+  const [reminderForm, setReminderForm] = useState({ customerId: "", scheduledFor: "", message: "" });
+  const [report, setReport] = useState<ReportData | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState("");
+  const [reportRange, setReportRange] = useState({ from: "", to: "" });
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", amount: "", dueDate: "" });
   const [formError, setFormError] = useState("");
@@ -252,6 +264,74 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
       }
     }
     router.push("/login");
+  }
+
+  async function loadReminders() {
+    setReminderLoading(true);
+    setReminderError("");
+    if (!liveMode) {
+      setReminderError("Eslatmalar uchun Supabase ulanishi kerak.");
+      setReminderLoading(false);
+      return;
+    }
+    const response = await fetch("/api/reminders?status=pending");
+    const payload = await response.json().catch(() => null) as { reminders?: ReminderItem[]; error?: string } | null;
+    if (!response.ok) setReminderError(payload?.error || "Eslatmalar olinmadi.");
+    else setReminders(payload?.reminders ?? []);
+    setReminderLoading(false);
+  }
+
+  function openMoreView(view: MoreView) {
+    setMoreOpen(false);
+    setMoreView(view);
+    if (view === "reminders") void loadReminders();
+    if (view === "reports") void loadReport(reportRange);
+  }
+
+  async function saveReminder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setReminderError("");
+    if (!reminderForm.customerId || !reminderForm.scheduledFor) {
+      setReminderError("Mijoz va muddatni kiriting.");
+      return;
+    }
+    const response = await fetch("/api/reminders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customerId: reminderForm.customerId, scheduledFor: new Date(reminderForm.scheduledFor).toISOString(), message: reminderForm.message }) });
+    const payload = await response.json().catch(() => null) as { reminder?: ReminderItem; error?: string } | null;
+    if (!response.ok || !payload?.reminder) {
+      setReminderError(payload?.error || "Eslatma saqlanmadi.");
+      return;
+    }
+    setReminderForm({ customerId: "", scheduledFor: "", message: "" });
+    setNotice({ tone: "success", text: "Eslatma saqlandi." });
+    void loadReminders();
+  }
+
+  async function cancelReminder(id: string) {
+    const response = await fetch(`/api/reminders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "cancelled" }) });
+    if (!response.ok) {
+      setReminderError("Eslatma bekor qilinmadi.");
+      return;
+    }
+    setReminders((current) => current.filter((reminder) => reminder.id !== id));
+    setNotice({ tone: "success", text: "Eslatma bekor qilindi." });
+  }
+
+  async function loadReport(range: { from: string; to: string }) {
+    setReportLoading(true);
+    setReportError("");
+    if (!liveMode) {
+      setReportError("Hisobot uchun Supabase ulanishi kerak.");
+      setReportLoading(false);
+      return;
+    }
+    const params = new URLSearchParams();
+    if (range.from) params.set("from", range.from);
+    if (range.to) params.set("to", range.to);
+    const response = await fetch(`/api/reports?${params.toString()}`);
+    const payload = await response.json().catch(() => null) as { report?: ReportData; error?: string } | null;
+    if (!response.ok || !payload?.report) setReportError(payload?.error || "Hisobot olinmadi.");
+    else setReport(payload.report);
+    setReportLoading(false);
   }
 
   async function recordActivity(customerId: string | null, eventType: string, description: string) {
@@ -497,8 +577,8 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
           <a className={`nav-item ${activeSection === "dashboard" ? "active" : ""}`} href="#dashboard"><LayoutDashboard size={18} />Bosh sahifa</a>
           <a className={`nav-item ${activeSection === "customers" ? "active" : ""}`} href="#customers"><Users size={18} />Mijozlar</a>
           <a className={`nav-item ${activeSection === "activity" ? "active" : ""}`} href="#activity"><CircleDollarSign size={18} />Faoliyat</a>
-          <a className={`nav-item ${activeSection === "more" ? "active" : ""}`} href="#more" onClick={() => { setActiveSection("more"); setMoreOpen(true); }}><Bell size={18} />Eslatmalar</a>
-          <a className={`nav-item ${activeSection === "more" ? "active" : ""}`} href="#more" onClick={() => { setActiveSection("more"); setMoreOpen(true); }}><ArrowDownToLine size={18} />Hisobot</a>
+          <button className={`nav-item nav-button ${moreView === "reminders" ? "active" : ""}`} onClick={() => { setActiveSection("more"); openMoreView("reminders"); }}><Bell size={18} />Eslatmalar</button>
+          <button className={`nav-item nav-button ${moreView === "reports" ? "active" : ""}`} onClick={() => { setActiveSection("more"); openMoreView("reports"); }}><ArrowDownToLine size={18} />Hisobot</button>
         </nav>
         <div className="sidebar-spacer" />
         <div className="shop-card"><div className="shop-label">Do'kon</div><div className="shop-name">{shopName}</div><div className="shop-owner">{userEmail ?? "Sinov rejimi"}</div></div>
@@ -563,7 +643,11 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
 
       {historyOpen && historyCustomer && <div className="history-backdrop" role="presentation" onClick={closeHistory}><section className="history-screen" role="dialog" aria-modal="true" aria-labelledby="history-title" onClick={(event) => event.stopPropagation()}><div className="history-screen-head"><div><div className="eyebrow">Mijoz tarixi</div><h2 id="history-title">{historyCustomer.name}</h2><p>{historyTransactions.length} ta yozuv · Qoldiq {formatMoney(historyCustomer.balance)}</p></div><button className="icon-button" onClick={closeHistory} aria-label="Tarixni yopish"><X size={20} /></button></div><div className="history-controls"><div className="history-filters" role="tablist" aria-label="Tarix turi"><button className={`history-filter ${historyFilter === "all" ? "active" : ""}`} onClick={() => setHistoryFilter("all")} aria-pressed={historyFilter === "all"}>Barchasi</button><button className={`history-filter ${historyFilter === "credit" ? "active" : ""}`} onClick={() => setHistoryFilter("credit")} aria-pressed={historyFilter === "credit"}>Qarz</button><button className={`history-filter ${historyFilter === "payment" ? "active" : ""}`} onClick={() => setHistoryFilter("payment")} aria-pressed={historyFilter === "payment"}>To'lov</button></div><div className="history-search"><Search size={17} aria-hidden="true" /><input value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Tarixdan qidirish..." aria-label="Tarixdan qidirish" /></div></div>{historyLoading ? <div className="history-empty"><BookOpen size={29} /><strong>Tarix yuklanmoqda...</strong><span>Yozuvlar olinmoqda.</span></div> : historyError ? <div className="history-empty"><BookOpen size={29} /><strong>Tarixni olib bo'lmadi.</strong><span>{historyError}</span><button className="button button-secondary" onClick={() => void loadCustomerHistory(historyCustomer)}>Qayta yuklash</button></div> : historyGroups.length ? <div className="history-groups">{historyGroups.map((group) => <section className="history-group" key={group.key}><h3 className="history-group-title">{group.label}</h3><div className="history-list">{group.transactions.map((transaction) => <TransactionRow transaction={transaction} key={transaction.id} onReverse={reverseTransaction} reversing={correctionId === transaction.id} />)}</div></section>)}</div> : <div className="history-empty"><BookOpen size={29} /><strong>Bu filtrda yozuv yo'q.</strong><span>Qidiruv yoki filtrni o'zgartirib ko'ring.</span>{(historySearch || historyFilter !== "all") && <button className="button button-secondary" onClick={() => { setHistorySearch(""); setHistoryFilter("all"); }}>Filtrni tozalash</button>}</div>}</section></div>}
 
-      {moreOpen && <div className="sheet-backdrop" role="presentation" onClick={() => setMoreOpen(false)}><section className="sheet small-sheet" role="dialog" aria-modal="true" aria-labelledby="more-title" onClick={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="sheet-heading"><div><div className="eyebrow">Qo'shimcha</div><h2 id="more-title">Yana</h2></div><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label="Yopish"><X size={19} /></button></div><div className="more-list"><div><Bell size={18} /><span><strong>Eslatmalar</strong><small>Tez orada</small></span></div><div><ArrowDownToLine size={18} /><span><strong>Hisobot</strong><small>Tez orada</small></span></div></div></section></div>}
+      {moreOpen && <div className="sheet-backdrop" role="presentation" onClick={() => setMoreOpen(false)}><section className="sheet small-sheet" role="dialog" aria-modal="true" aria-labelledby="more-title" onClick={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="sheet-heading"><div><div className="eyebrow">Qo'shimcha</div><h2 id="more-title">Yana</h2></div><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label="Yopish"><X size={19} /></button></div><div className="more-list"><button onClick={() => openMoreView("reminders")}><Bell size={18} /><span><strong>Eslatmalar</strong><small>Muddatlarni eslab qolish</small></span><ChevronRight size={17} /></button><button onClick={() => openMoreView("reports")}><ArrowDownToLine size={18} /><span><strong>Hisobot</strong><small>Qarz va to'lov tahlili</small></span><ChevronRight size={17} /></button></div></section></div>}
+
+      {moreView === "reminders" && <div className="modal-backdrop" role="presentation" onClick={() => setMoreView(null)}><div className="modal more-modal" role="dialog" aria-modal="true" aria-labelledby="reminders-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Vaqtida eslatma</div><h2 id="reminders-title">Eslatmalar</h2></div><button className="icon-button" onClick={() => setMoreView(null)} aria-label="Eslatmalarni yopish"><X size={19} /></button></div><form onSubmit={saveReminder}><div className="field-grid"><div className="field full"><label htmlFor="reminder-customer">Mijoz</label><select id="reminder-customer" value={reminderForm.customerId} onChange={(event) => setReminderForm({ ...reminderForm, customerId: event.target.value })}><option value="">Mijozni tanlang</option>{customers.filter((customer) => customer.balance > 0).map((customer) => <option key={customer.id} value={customer.id}>{customer.name} · {formatMoney(customer.balance)}</option>)}</select></div><div className="field full"><label htmlFor="reminder-date">Eslatma vaqti</label><input id="reminder-date" type="datetime-local" value={reminderForm.scheduledFor} onChange={(event) => setReminderForm({ ...reminderForm, scheduledFor: event.target.value })} /></div><div className="field full"><label htmlFor="reminder-message">Xabar <span>(ixtiyoriy)</span></label><input id="reminder-message" value={reminderForm.message} onChange={(event) => setReminderForm({ ...reminderForm, message: event.target.value })} placeholder="Masalan: qarz muddatini eslatish" /></div></div>{reminderError && <div className="form-error" role="alert">{reminderError}</div>}<div className="modal-actions"><button type="submit" className="button button-primary">Eslatma qo'shish</button></div></form><div className="reminder-list"><div className="section-label">Kutilayotgan eslatmalar</div>{reminderLoading ? <div className="history-loading">Yuklanmoqda...</div> : reminders.length ? reminders.map((reminder) => <div className="reminder-item" key={reminder.id}><div><strong>{reminder.customers?.name || "Mijoz"}</strong><small>{reminder.scheduled_for ? formatHistoryDate(reminder.scheduled_for) : "Vaqt belgilanmagan"}{reminder.message ? ` · ${reminder.message}` : ""}</small></div><button className="text-button" onClick={() => void cancelReminder(reminder.id)}>Bekor</button></div>) : <div className="history-empty compact-history"><Bell size={20} /><span>Kutilayotgan eslatma yo'q.</span></div>}</div></div></div>}
+
+      {moreView === "reports" && <div className="modal-backdrop" role="presentation" onClick={() => setMoreView(null)}><div className="modal more-modal" role="dialog" aria-modal="true" aria-labelledby="reports-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Raqamlar</div><h2 id="reports-title">Hisobot</h2></div><button className="icon-button" onClick={() => setMoreView(null)} aria-label="Hisobotni yopish"><X size={19} /></button></div><div className="report-filters"><div className="field"><label htmlFor="report-from">Boshlanish</label><input id="report-from" type="date" value={reportRange.from} onChange={(event) => setReportRange({ ...reportRange, from: event.target.value })} /></div><div className="field"><label htmlFor="report-to">Tugash</label><input id="report-to" type="date" value={reportRange.to} onChange={(event) => setReportRange({ ...reportRange, to: event.target.value })} /></div><button className="button button-secondary" onClick={() => void loadReport(reportRange)}>{reportLoading ? "..." : "Ko'rsatish"}</button></div>{reportError && <div className="form-error" role="alert">{reportError}</div>}{report && <div className="report-grid"><StatCard label="Yangi qarz" value={formatMoney(report.newCredits)} icon={<Plus size={17} />} foot="Tanlangan davr" /><StatCard label="Yig'ilgan" value={formatMoney(report.collected)} icon={<Check size={17} />} foot="Tanlangan davr" /><StatCard label="Jami qoldiq" value={formatMoney(report.outstanding)} icon={<WalletCards size={17} />} foot="Faol qarzlar" /><StatCard label="Kechikkan" value={formatMoney(report.overdueAmount)} icon={<Clock3 size={17} />} foot={`${report.overdueCount} ta yozuv`} /><StatCard label="Faol mijoz" value={String(report.activeCustomers)} icon={<Users size={17} />} foot="Qoldig'i bor" /></div>}</div></div>}
     </div>
   );
 }
