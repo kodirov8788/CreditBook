@@ -22,6 +22,18 @@ Add the Supabase URL and publishable key to `.env.local`. Run [`supabase/schema.
 
 For an existing database, apply the files in [`supabase/migrations`](./supabase/migrations) after the base schema. Review and test each migration before applying it to production.
 
+After applying the RBAC migrations, assign the first platform owner explicitly in Supabase SQL Editor:
+
+```sql
+insert into public.platform_roles (user_id, role)
+select id, 'platform_owner'
+from auth.users
+where email = 'your-owner-email@example.com'
+on conflict (user_id) do update set role = excluded.role;
+```
+
+Do not make the first signed-in user an owner automatically. Keep the platform owner account protected with MFA and use `/admin` only after this role is assigned.
+
 ## Security
 
 Row Level Security is enabled for every application table. The browser only uses the public Supabase publishable key. Never commit a secret key, database password, or service-role credential. Add production environment variables in Vercel's project settings.
