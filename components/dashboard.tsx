@@ -34,8 +34,8 @@ type QuickAction = "credit" | "payment" | "edit";
 type EntryType = "credit" | "payment";
 type HistoryFilter = "all" | "credit" | "payment";
 type HistoryCredit = { id: string; title: string | null; principal: number; due_date: string | null; status: string; created_at: string };
-type HistoryPayment = { id: string; debt_id: string; amount: number; paid_at: string | null; note: string | null; created_at: string };
-type HistoryTransaction = { id: string; type: "credit" | "payment"; amount: number; description: string; occurredAt: string; dueDate: string | null; status: string | null; balanceAfter: number };
+type HistoryPayment = { id: string; debt_id: string; amount: number; paid_at: string | null; note: string | null; created_at: string; voided_at: string | null; void_reason: string | null };
+type HistoryTransaction = { id: string; type: "credit" | "payment"; amount: number; description: string; occurredAt: string; dueDate: string | null; status: string | null; balanceAfter: number; voided: boolean };
 type ActivityItem = { id: string; customer_id: string | null; event_type: string; description: string; created_at: string };
 type Notice = { tone: "success" | "info"; text: string } | null;
 
@@ -60,13 +60,13 @@ function formatHistoryGroup(value: string) {
 
 function normalizeHistory(credits: HistoryCredit[], payments: HistoryPayment[]) {
   const raw: HistoryTransaction[] = [
-    ...credits.map((credit) => ({ id: credit.id, type: "credit" as const, amount: Number(credit.principal), description: credit.title?.trim() || "Qarz", occurredAt: credit.created_at, dueDate: credit.due_date, status: credit.status, balanceAfter: 0 })),
-    ...payments.map((payment) => ({ id: payment.id, type: "payment" as const, amount: Number(payment.amount), description: payment.note?.trim() || "To'lov", occurredAt: payment.paid_at ?? payment.created_at, dueDate: null, status: null, balanceAfter: 0 })),
+    ...credits.map((credit) => ({ id: credit.id, type: "credit" as const, amount: Number(credit.principal), description: credit.title?.trim() || "Qarz", occurredAt: credit.created_at, dueDate: credit.due_date, status: credit.status, balanceAfter: 0, voided: credit.status === "cancelled" })),
+    ...payments.map((payment) => ({ id: payment.id, type: "payment" as const, amount: Number(payment.amount), description: payment.note?.trim() || "To'lov", occurredAt: payment.paid_at ?? payment.created_at, dueDate: null, status: payment.voided_at ? "voided" : null, balanceAfter: 0, voided: Boolean(payment.voided_at) })),
   ].filter((transaction) => Number.isFinite(transaction.amount) && transaction.amount > 0).sort((left, right) => new Date(left.occurredAt).getTime() - new Date(right.occurredAt).getTime());
 
   let balance = 0;
   return raw.map((transaction) => {
-    balance = Math.max(balance + (transaction.type === "credit" ? transaction.amount : -transaction.amount), 0);
+    if (!transaction.voided) balance = Math.max(balance + (transaction.type === "credit" ? transaction.amount : -transaction.amount), 0);
     return { ...transaction, balanceAfter: balance };
   }).reverse();
 }
@@ -105,6 +105,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [historySearch, setHistorySearch] = useState("");
+  const [correctionId, setCorrectionId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [activeSection, setActiveSection] = useState("dashboard");
@@ -169,7 +170,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
 
     const [{ data: credits, error: creditError }, { data: payments, error: paymentError }] = await Promise.all([
       supabase.from("debts").select("id, title, principal, due_date, status, created_at").eq("customer_id", customer.id).order("created_at", { ascending: false }),
-      supabase.from("payments").select("id, debt_id, amount, paid_at, note, created_at").eq("customer_id", customer.id).order("paid_at", { ascending: false }),
+      supabase.from("payments").select("id, debt_id, amount, paid_at, note, created_at, voided_at, void_reason").eq("customer_id", customer.id).order("paid_at", { ascending: false }),
     ]);
 
     if (creditError || paymentError) {
@@ -201,6 +202,43 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     setHistoryOpen(false);
     setHistoryFilter("all");
     setHistorySearch("");
+  }
+
+  async function reverseTransaction(transaction: HistoryTransaction) {
+    if (!historyCustomer || transaction.voided || correctionId) return;
+    const actionLabel = transaction.type === "payment" ? "to'lovni" : "qarzni";
+    if (!window.confirm(`${formatMoney(transaction.amount)} ${actionLabel} bekor qilinsinmi? Bu amal tarixda saqlanadi.`)) return;
+
+    setCorrectionId(transaction.id);
+    setHistoryError("");
+    try {
+      const endpoint = transaction.type === "payment"
+        ? `/api/customers/${historyCustomer.id}/payments/${transaction.id}/void`
+        : `/api/customers/${historyCustomer.id}/credits/${transaction.id}/cancel`;
+      const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason: "Foydalanuvchi tuzatishi" }) });
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) {
+        setHistoryError(payload?.error || "Yozuvni bekor qilib bo'lmadi.");
+        return;
+      }
+
+      const nextBalance = Math.max(historyCustomer.balance + (transaction.type === "payment" ? transaction.amount : -transaction.amount), 0);
+      const nextStatus = getCustomerStatus(nextBalance, historyCustomer.dueDate);
+      setCustomers((current) => current.map((item) => item.id === historyCustomer.id ? { ...item, balance: nextBalance, status: nextStatus } : item));
+      setStats((current) => ({
+        ...current,
+        totalOutstanding: Math.max(current.totalOutstanding + (transaction.type === "payment" ? transaction.amount : -transaction.amount), 0),
+        overdueAmount: Math.max(current.overdueAmount + (nextStatus === "overdue" ? nextBalance : 0) - (historyCustomer.status === "overdue" ? historyCustomer.balance : 0), 0),
+        activeCustomers: current.activeCustomers + (historyCustomer.balance <= 0 && nextBalance > 0 ? 1 : historyCustomer.balance > 0 && nextBalance <= 0 ? -1 : 0),
+        collectedThisMonth: transaction.type === "payment" && transaction.occurredAt.slice(0, 7) === new Date().toISOString().slice(0, 7) ? Math.max(current.collectedThisMonth - transaction.amount, 0) : current.collectedThisMonth,
+      }));
+      setNotice({ tone: "success", text: `${actionLabel[0].toUpperCase()}${actionLabel.slice(1)} bekor qilindi.` });
+      await loadCustomerHistory({ ...historyCustomer, balance: nextBalance, status: nextStatus });
+    } catch {
+      setHistoryError("Yozuvni bekor qilib bo'lmadi. Qayta urinib ko'ring.");
+    } finally {
+      setCorrectionId(null);
+    }
   }
 
   async function handleLogout() {
@@ -518,7 +556,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
 
       {selectedCustomer && <div className="sheet-backdrop" role="presentation" onClick={() => setSelectedCustomerId(null)}><section className="sheet customer-sheet" role="dialog" aria-modal="true" aria-labelledby="customer-sheet-title" onClick={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="customer-sheet-head"><div className="customer-avatar large">{initials(selectedCustomer.name)}</div><div><h2 id="customer-sheet-title">{selectedCustomer.name}</h2><p>{selectedCustomer.phone}</p></div><button className="icon-button" onClick={() => setSelectedCustomerId(null)} aria-label="Yopish"><X size={19} /></button></div><div className="customer-balance"><span>Qoldiq</span><strong className="money">{formatMoney(selectedCustomer.balance)}</strong><span className={`status ${selectedCustomer.status}`}>{statusLabels[selectedCustomer.status]}</span></div><div className="customer-sheet-meta"><div><span>Muddat</span><strong>{formatDate(selectedCustomer.dueDate)}</strong></div><div><span>Oxirgi to'lov</span><strong>{selectedCustomer.lastPayment ? formatDate(selectedCustomer.lastPayment.slice(0, 10)) : "Hali yo'q"}</strong></div></div><div className="customer-sheet-actions"><button className="button button-secondary" onClick={() => openQuickAction("credit", selectedCustomer)}><Plus size={17} />Qarz</button><button className="button button-primary" onClick={() => openQuickAction("payment", selectedCustomer)} disabled={selectedCustomer.balance <= 0}><Check size={17} />To'lov</button><button className="button button-ghost" onClick={() => openQuickAction("edit", selectedCustomer)}><Ellipsis size={18} />Tahrir</button></div><div className="recent-history"><div className="recent-history-heading"><div><h3>So'nggi yozuvlar</h3><span>{historyLoading ? "Yuklanmoqda..." : `${historyTransactions.length} ta yozuv`}</span></div><button className="text-button" onClick={() => openFullHistory(selectedCustomer)}>Barcha tarix</button></div>{historyLoading ? <div className="history-loading">Tarix yuklanmoqda...</div> : historyError ? <div className="history-error" role="alert"><span>{historyError}</span><button className="text-button" onClick={() => void loadCustomerHistory(selectedCustomer)}>Qayta</button></div> : historyTransactions.length ? <div className="history-list preview">{historyTransactions.slice(0, 3).map((transaction) => <TransactionRow transaction={transaction} key={transaction.id} />)}</div> : <div className="history-empty compact-history"><BookOpen size={21} /><span>Hali qarz yoki to'lov yozilmagan.</span></div>}</div><div className="sheet-note"><BookOpen size={17} /><span>Har bir yangi qarz va to'lov mijoz tarixida saqlanadi.</span></div></section></div>}
 
-      {historyOpen && historyCustomer && <div className="history-backdrop" role="presentation" onClick={closeHistory}><section className="history-screen" role="dialog" aria-modal="true" aria-labelledby="history-title" onClick={(event) => event.stopPropagation()}><div className="history-screen-head"><div><div className="eyebrow">Mijoz tarixi</div><h2 id="history-title">{historyCustomer.name}</h2><p>{historyTransactions.length} ta yozuv · Qoldiq {formatMoney(historyCustomer.balance)}</p></div><button className="icon-button" onClick={closeHistory} aria-label="Tarixni yopish"><X size={20} /></button></div><div className="history-controls"><div className="history-filters" role="tablist" aria-label="Tarix turi"><button className={`history-filter ${historyFilter === "all" ? "active" : ""}`} onClick={() => setHistoryFilter("all")} aria-pressed={historyFilter === "all"}>Barchasi</button><button className={`history-filter ${historyFilter === "credit" ? "active" : ""}`} onClick={() => setHistoryFilter("credit")} aria-pressed={historyFilter === "credit"}>Qarz</button><button className={`history-filter ${historyFilter === "payment" ? "active" : ""}`} onClick={() => setHistoryFilter("payment")} aria-pressed={historyFilter === "payment"}>To'lov</button></div><div className="history-search"><Search size={17} aria-hidden="true" /><input value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Tarixdan qidirish..." aria-label="Tarixdan qidirish" /></div></div>{historyLoading ? <div className="history-empty"><BookOpen size={29} /><strong>Tarix yuklanmoqda...</strong><span>Yozuvlar olinmoqda.</span></div> : historyError ? <div className="history-empty"><BookOpen size={29} /><strong>Tarixni olib bo'lmadi.</strong><span>{historyError}</span><button className="button button-secondary" onClick={() => void loadCustomerHistory(historyCustomer)}>Qayta yuklash</button></div> : historyGroups.length ? <div className="history-groups">{historyGroups.map((group) => <section className="history-group" key={group.key}><h3 className="history-group-title">{group.label}</h3><div className="history-list">{group.transactions.map((transaction) => <TransactionRow transaction={transaction} key={transaction.id} />)}</div></section>)}</div> : <div className="history-empty"><BookOpen size={29} /><strong>Bu filtrda yozuv yo'q.</strong><span>Qidiruv yoki filtrni o'zgartirib ko'ring.</span>{(historySearch || historyFilter !== "all") && <button className="button button-secondary" onClick={() => { setHistorySearch(""); setHistoryFilter("all"); }}>Filtrni tozalash</button>}</div>}</section></div>}
+      {historyOpen && historyCustomer && <div className="history-backdrop" role="presentation" onClick={closeHistory}><section className="history-screen" role="dialog" aria-modal="true" aria-labelledby="history-title" onClick={(event) => event.stopPropagation()}><div className="history-screen-head"><div><div className="eyebrow">Mijoz tarixi</div><h2 id="history-title">{historyCustomer.name}</h2><p>{historyTransactions.length} ta yozuv · Qoldiq {formatMoney(historyCustomer.balance)}</p></div><button className="icon-button" onClick={closeHistory} aria-label="Tarixni yopish"><X size={20} /></button></div><div className="history-controls"><div className="history-filters" role="tablist" aria-label="Tarix turi"><button className={`history-filter ${historyFilter === "all" ? "active" : ""}`} onClick={() => setHistoryFilter("all")} aria-pressed={historyFilter === "all"}>Barchasi</button><button className={`history-filter ${historyFilter === "credit" ? "active" : ""}`} onClick={() => setHistoryFilter("credit")} aria-pressed={historyFilter === "credit"}>Qarz</button><button className={`history-filter ${historyFilter === "payment" ? "active" : ""}`} onClick={() => setHistoryFilter("payment")} aria-pressed={historyFilter === "payment"}>To'lov</button></div><div className="history-search"><Search size={17} aria-hidden="true" /><input value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Tarixdan qidirish..." aria-label="Tarixdan qidirish" /></div></div>{historyLoading ? <div className="history-empty"><BookOpen size={29} /><strong>Tarix yuklanmoqda...</strong><span>Yozuvlar olinmoqda.</span></div> : historyError ? <div className="history-empty"><BookOpen size={29} /><strong>Tarixni olib bo'lmadi.</strong><span>{historyError}</span><button className="button button-secondary" onClick={() => void loadCustomerHistory(historyCustomer)}>Qayta yuklash</button></div> : historyGroups.length ? <div className="history-groups">{historyGroups.map((group) => <section className="history-group" key={group.key}><h3 className="history-group-title">{group.label}</h3><div className="history-list">{group.transactions.map((transaction) => <TransactionRow transaction={transaction} key={transaction.id} onReverse={reverseTransaction} reversing={correctionId === transaction.id} />)}</div></section>)}</div> : <div className="history-empty"><BookOpen size={29} /><strong>Bu filtrda yozuv yo'q.</strong><span>Qidiruv yoki filtrni o'zgartirib ko'ring.</span>{(historySearch || historyFilter !== "all") && <button className="button button-secondary" onClick={() => { setHistorySearch(""); setHistoryFilter("all"); }}>Filtrni tozalash</button>}</div>}</section></div>}
 
       {moreOpen && <div className="sheet-backdrop" role="presentation" onClick={() => setMoreOpen(false)}><section className="sheet small-sheet" role="dialog" aria-modal="true" aria-labelledby="more-title" onClick={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="sheet-heading"><div><div className="eyebrow">Qo'shimcha</div><h2 id="more-title">Yana</h2></div><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label="Yopish"><X size={19} /></button></div><div className="more-list"><div><Bell size={18} /><span><strong>Eslatmalar</strong><small>Tez orada</small></span></div><div><ArrowDownToLine size={18} /><span><strong>Hisobot</strong><small>Tez orada</small></span></div></div></section></div>}
     </div>
@@ -529,9 +567,9 @@ function StatCard({ label, value, icon, foot, footClass = "" }: { label: string;
   return <div className="stat-card"><div className="stat-label"><span>{label}</span><span className="stat-icon">{icon}</span></div><div className="stat-value money">{value}</div><div className={`stat-foot ${footClass}`}>{foot}</div></div>;
 }
 
-function TransactionRow({ transaction }: { transaction: HistoryTransaction }) {
+function TransactionRow({ transaction, onReverse, reversing = false }: { transaction: HistoryTransaction; onReverse?: (transaction: HistoryTransaction) => void; reversing?: boolean }) {
   const isCredit = transaction.type === "credit";
-  return <article className={`history-row ${transaction.type}`}><span className={`history-type-icon ${transaction.type}`} aria-hidden="true">{isCredit ? <Plus size={16} /> : <Check size={16} />}</span><div className="history-row-copy"><div className="history-row-title"><strong>{transaction.description}</strong><span>{isCredit ? "Qarz" : "To'lov"}</span></div><small>{formatHistoryDate(transaction.occurredAt)}{isCredit && transaction.dueDate ? ` · Muddat ${formatDate(transaction.dueDate)}` : ""}</small></div><div className="history-row-values"><strong className="money">{isCredit ? "+" : "−"}{formatMoney(transaction.amount)}</strong><small>Qoldiq {formatMoney(transaction.balanceAfter)}</small></div></article>;
+  return <article className={`history-row ${transaction.type} ${transaction.voided ? "voided" : ""}`}><span className={`history-type-icon ${transaction.type}`} aria-hidden="true">{isCredit ? <Plus size={16} /> : <Check size={16} />}</span><div className="history-row-copy"><div className="history-row-title"><strong>{transaction.description}</strong><span>{transaction.voided ? "Bekor qilingan" : isCredit ? "Qarz" : "To'lov"}</span></div><small>{formatHistoryDate(transaction.occurredAt)}{isCredit && transaction.dueDate ? ` · Muddat ${formatDate(transaction.dueDate)}` : ""}</small></div><div className="history-row-values"><strong className="money">{transaction.voided ? "Bekor" : `${isCredit ? "+" : "−"}${formatMoney(transaction.amount)}`}</strong><small>Qoldiq {formatMoney(transaction.balanceAfter)}</small></div>{onReverse && !transaction.voided && <button className="text-button history-reverse" onClick={() => onReverse(transaction)} disabled={reversing}>{reversing ? "..." : "Bekor qilish"}</button>}</article>;
 }
 
 function ActivityRow({ activity }: { activity: ActivityItem }) {

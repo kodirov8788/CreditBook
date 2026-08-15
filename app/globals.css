@@ -208,6 +208,9 @@ h2 { margin: 0; font-size: 24px; line-height: 1.15; }
 .history-row.credit .history-row-values strong { color: var(--green-dark); }
 .history-row.payment .history-row-values strong { color: var(--blue); }
 .history-row-values small { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; white-space: nowrap; }
+.history-row.voided { opacity: .62; }
+.history-row.voided .history-row-values strong { color: var(--muted); }
+.history-reverse { flex: 0 0 auto; color: var(--red); font-size: 10px; }
 .history-loading { padding: 18px 0 6px; color: var(--muted); font-size: 11px; text-align: center; }
 .history-error { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; border: 1px solid #f0b8b5; border-radius: 10px; background: var(--red-bg); color: var(--red); padding: 10px 11px; font-size: 11px; }
 .history-error .text-button { color: var(--red); }

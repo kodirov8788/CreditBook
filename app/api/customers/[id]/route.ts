@@ -9,7 +9,7 @@ export async function GET(request: Request, context: Context) {
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
 
-  const { data, error } = await supabase.from("customers").select("id, name, phone, address, notes, created_at, updated_at, debts(id, title, principal, due_date, status, created_at, payments(id, amount, paid_at, note))").eq("id", id).single();
+  const { data, error } = await supabase.from("customers").select("id, name, phone, address, notes, created_at, updated_at, debts(id, title, principal, due_date, status, created_at, payments(id, amount, paid_at, note, voided_at, void_reason))").eq("id", id).single();
   if (error) return NextResponse.json({ error: "Mijoz topilmadi." }, { status: 404 });
   return NextResponse.json({ customer: data });
 }
