@@ -256,10 +256,11 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
 
   async function recordActivity(customerId: string | null, eventType: string, description: string) {
     const localActivity: ActivityItem = { id: `local-${Date.now()}-${Math.random()}`, customer_id: customerId, event_type: eventType, description, created_at: new Date().toISOString() };
-    if (supabase && liveMode) {
-      const { data, error } = await supabase.from("activity_logs").insert({ customer_id: customerId, event_type: eventType, description }).select("id, customer_id, event_type, description, created_at").single();
-      if (!error && data) {
-        setActivities((current) => [data as ActivityItem, ...current].slice(0, 10));
+    if (liveMode) {
+      const response = await fetch("/api/activity", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customerId, eventType, description }) });
+      const payload = await response.json().catch(() => null) as { activity?: ActivityItem } | null;
+      if (response.ok && payload?.activity) {
+        setActivities((current) => [payload.activity as ActivityItem, ...current].slice(0, 10));
         return;
       }
     }
@@ -339,6 +340,13 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     return response.ok ? null : payload?.error || "To'lov yozilmadi. Qayta urinib ko'ring.";
   }
 
+  async function recordCredit(customer: DashboardCustomer, amount: number, dueDate: string | null, title: string) {
+    if (!liveMode) return null;
+    const response = await fetch(`/api/customers/${customer.id}/credits`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount, dueDate, title: title.trim() || "Qarz" }) });
+    const payload = await response.json().catch(() => null) as { error?: string } | null;
+    return response.ok ? null : payload?.error || "Qarz yozilmadi. Qayta urinib ko'ring.";
+  }
+
   function applyCredit(customer: DashboardCustomer, amount: number, dueDate: string | null) {
     const nextBalance = customer.balance + amount;
     const nextStatus = getCustomerStatus(nextBalance, dueDate ?? customer.dueDate);
@@ -368,9 +376,10 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
           return;
         }
         if (supabase && liveMode) {
-          const { error } = await supabase.from("customers").update({ name: quickForm.name.trim(), phone: quickForm.phone.trim() || null }).eq("id", customer.id);
-          if (error) {
-            setQuickError("Saqlab bo'lmadi.");
+          const response = await fetch(`/api/customers/${customer.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: quickForm.name.trim(), phone: quickForm.phone.trim() || null }) });
+          const payload = await response.json().catch(() => null) as { error?: string } | null;
+          if (!response.ok) {
+            setQuickError(payload?.error || "Saqlab bo'lmadi.");
             return;
           }
         }
@@ -384,12 +393,10 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
           setQuickError("Summani kiriting.");
           return;
         }
-        if (supabase && liveMode) {
-          const { error } = await supabase.from("debts").insert({ customer_id: customer.id, principal: amount, due_date: quickForm.dueDate || null, title: quickForm.note.trim() || "Qarz" });
-          if (error) {
-            setQuickError("Qarz yozilmadi.");
-            return;
-          }
+        const creditError = await recordCredit(customer, amount, quickForm.dueDate || null, quickForm.note);
+        if (creditError) {
+          setQuickError(creditError);
+          return;
         }
         applyCredit(customer, amount, quickForm.dueDate || null);
         void recordActivity(customer.id, "credit", `${customer.name}ga ${formatMoney(amount)} qarz yozildi.`);
@@ -458,12 +465,10 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     setEntryError("");
     try {
       if (entryType === "credit") {
-        if (supabase && liveMode) {
-          const { error } = await supabase.from("debts").insert({ customer_id: customer.id, principal: amount, due_date: entryForm.dueDate || null, title: entryForm.note.trim() || "Qarz" });
-          if (error) {
-            setEntryError("Qarz yozilmadi. Qayta urinib ko'ring.");
-            return;
-          }
+        const creditError = await recordCredit(customer, amount, entryForm.dueDate || null, entryForm.note);
+        if (creditError) {
+          setEntryError(creditError);
+          return;
         }
         applyCredit(customer, amount, entryForm.dueDate || null);
         void recordActivity(customer.id, "credit", `${customer.name}ga ${formatMoney(amount)} qarz yozildi.`);
