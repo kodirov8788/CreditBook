@@ -3,7 +3,7 @@ import { getAuthenticatedClient } from "@/lib/api/auth";
 import { POST as createCustomer } from "@/app/api/customers/route";
 import { POST as createCredit } from "@/app/api/customers/[id]/credits/route";
 import { POST as createPayment } from "@/app/api/customers/[id]/payments/route";
-import { POST as createActivity } from "@/app/api/activity/route";
+import { GET as getActivity, POST as createActivity } from "@/app/api/activity/route";
 import { POST as createReminder } from "@/app/api/reminders/route";
 import { GET as getReport } from "@/app/api/reports/route";
 import { POST as createExpense } from "@/app/api/expenses/route";
@@ -84,6 +84,14 @@ describe("authenticated API contracts", () => {
     expect(invalidResponse.status).toBe(400);
     expect(validResponse.status).toBe(201);
     expect(insert).toHaveBeenCalledWith({ customer_id: "customer-1", event_type: "payment", description: "To'lov yozildi" });
+  });
+
+  it("protects activity history with authentication", async () => {
+    authMock.mockResolvedValue({ supabase: null, user: null });
+
+    const response = await getActivity(new Request("http://localhost/api/activity"));
+
+    expect(response.status).toBe(401);
   });
 
   it("validates reminder input before writing", async () => {
