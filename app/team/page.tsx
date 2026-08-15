@@ -6,5 +6,5 @@ export const revalidate = 0;
 
 export default async function TeamPage() {
   const context = await requireTeamManager();
-  return <TeamManager shopName={context.shopName} initialMembers={context.members} currentUserId={context.userId} />;
+  return <TeamManager shopName={context.shopName} initialMembers={context.members} currentUserId={context.userId} canEditShopName={context.canEditShopName} />;
 }

@@ -10,6 +10,7 @@ import { GET as getReport } from "@/app/api/reports/route";
 import { POST as createExpense } from "@/app/api/expenses/route";
 import { GET as getTeam, POST as inviteTeam } from "@/app/api/team/route";
 import { PATCH as updateTeamMember } from "@/app/api/team/[id]/route";
+import { PATCH as updateShop } from "@/app/api/shop/route";
 import { createServiceClient } from "@/lib/admin";
 import { recordAudit } from "@/lib/audit";
 
@@ -165,6 +166,16 @@ describe("authenticated API contracts", () => {
     const response = await inviteTeam(request({ email: "not-an-email", role: "cashier" }));
     expect(response.status).toBe(400);
     expect(serviceClientMock).not.toHaveBeenCalled();
+  });
+
+  it("protects shop name updates with owner permission and validation", async () => {
+    authMock.mockResolvedValue({ supabase: { from: vi.fn() } as never, user: { id: "user-1" } as never });
+    const invalidResponse = await updateShop(request({ name: "A" }));
+    expect(invalidResponse.status).toBe(400);
+
+    permissionMock.mockResolvedValue({ ok: false, response: NextResponse.json({ error: "Bu amal uchun ruxsat yo'q." }, { status: 403 }) });
+    const deniedResponse = await updateShop(request({ name: "Yangi do‘kon" }));
+    expect(deniedResponse.status).toBe(403);
   });
 
   it("does not allow the only shop owner to be suspended", async () => {

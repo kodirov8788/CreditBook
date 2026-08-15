@@ -268,6 +268,11 @@ select { width: 100%; min-height: 48px; border: 1px solid var(--line); border-ra
 .team-message { color: var(--green) !important; font-weight: 700; }
 .team-row .admin-status.pending { color: var(--amber); background: var(--amber-bg); }
 .team-panel-head { padding: 18px; border-bottom: 1px solid var(--line); }
+.team-settings { margin-bottom: 18px; }
+.team-settings-form { display: grid; gap: 9px; padding: 18px; }
+.team-settings-form input { width: 100%; min-height: 42px; border: 1px solid var(--line); border-radius: 10px; background: white; padding: 0 11px; color: var(--ink); font: inherit; font-size: 12px; }
+.team-settings-form .button { width: 100%; }
+.team-settings + .team-invite { margin-top: 0; }
 .team-list { display: grid; }
 .team-row { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--line); }
 .team-row:last-child { border-bottom: 0; }
@@ -282,6 +287,8 @@ select { width: 100%; min-height: 48px; border: 1px solid var(--line); border-ra
   .team-invite { grid-template-columns: 1fr 1.2fr; align-items: center; }
   .team-invite-form { grid-template-columns: 1.3fr .8fr auto; }
   .team-invite-form .button { width: auto; }
+  .team-settings-form { grid-template-columns: 1fr auto; align-items: center; }
+  .team-settings-form .button { width: auto; }
   .team-row { grid-template-columns: auto minmax(200px,1fr) 150px 120px auto; }
   .team-row select, .team-row .admin-status, .team-row .text-button { grid-column: auto; }
 }

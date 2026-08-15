@@ -17,9 +17,10 @@ export async function getDashboardData() {
     supabase.from("activity_logs").select("id, customer_id, event_type, description, created_at").order("created_at", { ascending: false }).limit(10),
     supabase.rpc("get_current_shop_id"),
   ]);
+  const { data: shop } = shopId ? await supabase.from("shops").select("name").eq("id", shopId).maybeSingle() : { data: null };
   const { data: canManageMembers, error: permissionError } = shopId ? await supabase.rpc("has_shop_permission", { p_shop_id: shopId, p_permission: "member.manage" }) : { data: false, error: null };
   const hasMemberManagement = !shopError && !permissionError && Boolean(canManageMembers);
-  const shopName = profile?.shop_name?.trim() || "Mahalla do'koni";
+  const shopName = shop?.name?.trim() || profile?.shop_name?.trim() || "Mahalla do'koni";
   if (error) return { initialCustomers: [], initialStats: emptyStats, initialActivities: [], userEmail: userData.user.email ?? null, shopName, liveMode: true, canManageMembers: hasMemberManagement, initialError: "Ma'lumotlar olinmadi. Supabase jadval va RLS sozlamalarini tekshiring." };
   const customers: DashboardCustomer[] = (data ?? []).map((customer) => {
     const debts = (customer.debts ?? []) as Array<{ principal: number; due_date: string | null; status: string; payments: Array<{ amount: number; paid_at: string; voided_at: string | null }> }>;
