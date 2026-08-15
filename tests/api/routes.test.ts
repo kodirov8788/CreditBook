@@ -8,11 +8,15 @@ import { GET as getActivity, POST as createActivity } from "@/app/api/activity/r
 import { POST as createReminder } from "@/app/api/reminders/route";
 import { GET as getReport } from "@/app/api/reports/route";
 import { POST as createExpense } from "@/app/api/expenses/route";
+import { GET as getTeam, POST as inviteTeam } from "@/app/api/team/route";
+import { createServiceClient } from "@/lib/admin";
 
 vi.mock("@/lib/api/auth", () => ({ getAuthenticatedClient: vi.fn(), requireShopPermission: vi.fn() }));
+vi.mock("@/lib/admin", () => ({ createServiceClient: vi.fn() }));
 
 const authMock = vi.mocked(getAuthenticatedClient);
 const permissionMock = vi.mocked(requireShopPermission);
+const serviceClientMock = vi.mocked(createServiceClient);
 
 function request(body: unknown, headers?: HeadersInit) {
   return new Request("http://localhost/api/test", {
@@ -30,6 +34,7 @@ describe("authenticated API contracts", () => {
   beforeEach(() => {
     authMock.mockReset();
     permissionMock.mockReset();
+    serviceClientMock.mockReset();
     permissionMock.mockResolvedValue({ ok: true, shopId: "shop-1" });
   });
 
@@ -135,5 +140,25 @@ describe("authenticated API contracts", () => {
 
     expect(response.status).toBe(403);
     expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("protects team management endpoints with authentication and permission", async () => {
+    authMock.mockResolvedValue({ supabase: null, user: null });
+    const unauthenticated = await getTeam(new Request("http://localhost/api/team"));
+    expect(unauthenticated.status).toBe(401);
+
+    const supabase = { from: vi.fn() };
+    authMock.mockResolvedValue({ supabase: supabase as never, user: { id: "user-1" } as never });
+    permissionMock.mockResolvedValue({ ok: false, response: NextResponse.json({ error: "Bu amal uchun ruxsat yo'q." }, { status: 403 }) });
+    const denied = await inviteTeam(request({ email: "worker@example.com", role: "cashier" }));
+    expect(denied.status).toBe(403);
+    expect(serviceClientMock).not.toHaveBeenCalled();
+  });
+
+  it("validates team invites before using the server-only Supabase key", async () => {
+    authMock.mockResolvedValue({ supabase: { from: vi.fn() } as never, user: { id: "user-1" } as never });
+    const response = await inviteTeam(request({ email: "not-an-email", role: "cashier" }));
+    expect(response.status).toBe(400);
+    expect(serviceClientMock).not.toHaveBeenCalled();
   });
 });

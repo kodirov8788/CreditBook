@@ -5,10 +5,16 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
   const requestedNext = requestUrl.searchParams.get("next") ?? "/";
+  const invitedShopId = requestUrl.searchParams.get("shop_id");
   const requestedTarget = new URL(requestedNext, requestUrl.origin);
   const next = requestedTarget.origin === requestUrl.origin ? requestedTarget : new URL("/", requestUrl.origin);
   const supabase = await createClient();
 
-  if (code && supabase) await supabase.auth.exchangeCodeForSession(code);
+  if (code && supabase) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error && invitedShopId && /^[0-9a-f-]{36}$/i.test(invitedShopId)) {
+      await supabase.rpc("activate_invited_memberships", { p_shop_id: invitedShopId });
+    }
+  }
   return NextResponse.redirect(next);
 }

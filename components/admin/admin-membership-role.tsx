@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { TEAM_ROLE_LABELS, TEAM_ROLES } from "@/lib/team-roles";
 
-const roles = ["shop_owner", "manager", "cashier", "accountant", "viewer"];
+const roles = TEAM_ROLES;
 
 export default function AdminMembershipRole({ userId, shopId, initialRole }: { userId: string; shopId: string; initialRole: string }) {
   const [role, setRole] = useState(initialRole);
@@ -23,5 +24,5 @@ export default function AdminMembershipRole({ userId, shopId, initialRole }: { u
     setSaving(false);
   }
 
-  return <span className="admin-role-control"><select value={role} onChange={(event) => void updateRole(event.target.value)} disabled={saving} aria-label="Shop roli">{roles.map((item) => <option key={item} value={item}>{item}</option>)}</select>{message && <small>{message}</small>}</span>;
+  return <span className="admin-role-control"><select value={role} onChange={(event) => void updateRole(event.target.value)} disabled={saving} aria-label="Shop roli">{roles.map((item) => <option key={item} value={item}>{TEAM_ROLE_LABELS[item]}</option>)}</select>{message && <small>{message}</small>}</span>;
 }
