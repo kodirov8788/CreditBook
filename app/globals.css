@@ -235,6 +235,40 @@ select { width: 100%; min-height: 48px; border: 1px solid var(--line); border-ra
 .admin-role-control small { color: var(--green); font-size: 9px; }
 .button-danger { border: 1px solid #e8b3ae; background: #fff3f1; color: #a33d35; }
 .button-danger:hover { background: #f9e5e2; }
+.team-page { min-height: 100vh; padding: 24px 16px 48px; background: var(--paper); }
+.team-head, .team-invite, .team-panel { width: min(100%, 980px); margin: 0 auto; }
+.team-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.team-back { display: inline-flex; align-items: center; gap: 5px; margin-bottom: 18px; color: var(--muted); font-size: 11px; font-weight: 800; text-decoration: none; }
+.team-back:hover { color: var(--green); }
+.team-head h1 { margin: 5px 0 7px; font-size: clamp(27px, 4vw, 40px); letter-spacing: -.04em; }
+.team-head p, .team-invite p, .team-panel-head p { margin: 0; color: var(--muted); font-size: 12px; }
+.team-secure { display: inline-flex; align-items: center; gap: 6px; color: var(--green); font-size: 11px; font-weight: 800; white-space: nowrap; }
+.team-invite, .team-panel { border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: 0 10px 28px rgba(28,36,43,.04); overflow: hidden; }
+.team-invite { display: grid; gap: 15px; margin-bottom: 18px; padding: 18px; }
+.team-invite h2, .team-panel-head h2 { margin: 4px 0 5px; font-size: 17px; }
+.team-invite-form { display: grid; gap: 9px; }
+.team-invite-form input, .team-invite-form select, .team-row select { width: 100%; min-height: 42px; border: 1px solid var(--line); border-radius: 10px; background: white; padding: 0 11px; color: var(--ink); font: inherit; font-size: 12px; }
+.team-invite-form .button { width: 100%; }
+.team-message { color: var(--green) !important; font-weight: 700; }
+.team-row .admin-status.pending { color: var(--amber); background: var(--amber-bg); }
+.team-panel-head { padding: 18px; border-bottom: 1px solid var(--line); }
+.team-list { display: grid; }
+.team-row { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--line); }
+.team-row:last-child { border-bottom: 0; }
+.team-user { display: grid; min-width: 0; gap: 3px; }
+.team-user strong, .team-user small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-user small { color: var(--muted); font-size: 11px; }
+.team-row select { grid-column: 2; }
+.team-row .admin-status { grid-column: 2; }
+.team-row .text-button { grid-column: 2; justify-self: start; }
+@media (min-width: 760px) {
+  .team-page { padding: 42px 34px 60px; }
+  .team-invite { grid-template-columns: 1fr 1.2fr; align-items: center; }
+  .team-invite-form { grid-template-columns: 1.3fr .8fr auto; }
+  .team-invite-form .button { width: auto; }
+  .team-row { grid-template-columns: auto minmax(200px,1fr) 150px 120px auto; }
+  .team-row select, .team-row .admin-status, .team-row .text-button { grid-column: auto; }
+}
 
 @media (min-width: 760px) {
   .admin-sidebar { position: sticky; top: 0; z-index: 3; min-height: 100vh; width: 220px; flex-direction: column; align-items: stretch; justify-content: flex-start; padding: 22px 14px; }
@@ -265,6 +299,9 @@ select { width: 100%; min-height: 48px; border: 1px solid var(--line); border-ra
 .more-list > button { display: flex; align-items: center; gap: 11px; width: 100%; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: white; color: var(--ink); text-align: left; }
 .more-list > button > span { flex: 1; display: grid; gap: 3px; }
 .more-list > button > svg { color: var(--green); }
+.more-list-link { display: flex; align-items: center; gap: 11px; width: 100%; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: white; color: var(--ink); text-align: left; text-decoration: none; }
+.more-list-link > span { flex: 1; display: grid; gap: 3px; }
+.more-list-link > svg { color: var(--green); }
 .more-modal { max-width: 620px; }
 .section-label { margin: 24px 0 9px; color: var(--muted); font-size: 11px; font-weight: 800; }
 .reminder-list { display: grid; gap: 8px; }
