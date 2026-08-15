@@ -6,6 +6,7 @@ import { POST as createPayment } from "@/app/api/customers/[id]/payments/route";
 import { POST as createActivity } from "@/app/api/activity/route";
 import { POST as createReminder } from "@/app/api/reminders/route";
 import { GET as getReport } from "@/app/api/reports/route";
+import { POST as createExpense } from "@/app/api/expenses/route";
 
 vi.mock("@/lib/api/auth", () => ({ getAuthenticatedClient: vi.fn() }));
 
@@ -101,5 +102,15 @@ describe("authenticated API contracts", () => {
     const response = await getReport(new Request("http://localhost/api/reports"));
 
     expect(response.status).toBe(401);
+  });
+
+  it("validates expenses before writing", async () => {
+    const supabase = { from: vi.fn() };
+    authMock.mockResolvedValue({ supabase: supabase as never, user: { id: "user-1" } as never });
+
+    const response = await createExpense(request({ category: "", amount: 100 }));
+
+    expect(response.status).toBe(400);
+    expect(supabase.from).not.toHaveBeenCalled();
   });
 });

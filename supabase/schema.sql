@@ -49,6 +49,20 @@ create table if not exists public.payments (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.expenses (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  category text not null check (char_length(trim(category)) >= 2),
+  amount numeric(14, 2) not null check (amount > 0),
+  spent_at date not null default current_date,
+  vendor text,
+  note text,
+  payment_method text not null default 'cash' check (payment_method in ('cash', 'card', 'bank', 'other')),
+  voided_at timestamptz,
+  void_reason text,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.reminders (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
@@ -76,6 +90,7 @@ create index if not exists customers_user_id_idx on public.customers(user_id);
 create index if not exists debts_user_id_idx on public.debts(user_id);
 create index if not exists debts_customer_id_idx on public.debts(customer_id);
 create index if not exists payments_debt_id_idx on public.payments(debt_id);
+create index if not exists expenses_user_spent_at_idx on public.expenses(user_id, spent_at desc);
 create index if not exists reminders_scheduled_for_idx on public.reminders(scheduled_for) where status = 'pending';
 
 create or replace function public.set_updated_at()
@@ -116,6 +131,7 @@ alter table public.profiles enable row level security;
 alter table public.customers enable row level security;
 alter table public.debts enable row level security;
 alter table public.payments enable row level security;
+alter table public.expenses enable row level security;
 alter table public.reminders enable row level security;
 alter table public.activity_logs enable row level security;
 
@@ -130,6 +146,8 @@ drop policy if exists "Users own debts" on public.debts;
 create policy "Users own debts" on public.debts for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 drop policy if exists "Users own payments" on public.payments;
 create policy "Users own payments" on public.payments for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists "Users own expenses" on public.expenses;
+create policy "Users own expenses" on public.expenses for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 drop policy if exists "Users own reminders" on public.reminders;
 create policy "Users own reminders" on public.reminders for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 drop policy if exists "Users own activity logs" on public.activity_logs;

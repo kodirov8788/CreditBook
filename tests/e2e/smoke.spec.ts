@@ -13,7 +13,7 @@ test("home route responds successfully", async ({ page }) => {
 });
 
 test("primary app routes respond successfully", async ({ request }) => {
-  for (const path of ["/dashboard", "/customers", "/customers/test-customer", "/activity", "/reminders", "/reports"]) {
+  for (const path of ["/dashboard", "/customers", "/customers/test-customer", "/activity", "/reminders", "/reports", "/expenses"]) {
     const response = await request.get(path);
     expect(response.status(), path).toBe(200);
   }
