@@ -75,6 +75,13 @@ where not exists (
     and existing.user_id = s.owner_user_id
 );
 
+-- The legacy schema validates child records against auth.uid(). A migration
+-- runs outside a user session, so pause those two validation triggers while
+-- backfilling tenant scope, then restore them before the permission migration
+-- replaces them with shop-aware validation.
+drop trigger if exists debts_validate_customer_owner on public.debts;
+drop trigger if exists payments_validate_customer_owner on public.payments;
+
 -- Backfill all legacy rows using the account's default shop. This is safe to
 -- rerun and only fills missing tenant scope.
 update public.customers c
@@ -112,6 +119,14 @@ set shop_id = s.id
 from public.shops s
 where a.shop_id is null
   and s.owner_user_id = a.user_id;
+
+create trigger debts_validate_customer_owner
+before insert or update on public.debts
+for each row execute function public.validate_customer_owner();
+
+create trigger payments_validate_customer_owner
+before insert or update on public.payments
+for each row execute function public.validate_customer_owner();
 
 alter table public.shops enable row level security;
 alter table public.shop_members enable row level security;
