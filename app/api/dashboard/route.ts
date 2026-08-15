@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { serverError, unauthorized } from "@/lib/api/response";
-import { getAuthenticatedClient } from "@/lib/api/auth";
+import { getAuthenticatedClient, requireShopPermission } from "@/lib/api/auth";
 
 export async function GET(request: Request) {
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
+  const access = await requireShopPermission(supabase, user, "customer.read");
+  if (!access.ok) return access.response;
   const { data, error } = await supabase.from("customers").select("id, name, phone, debts(principal, due_date, status, payments(amount, paid_at, voided_at))").order("created_at", { ascending: false });
   if (error) return serverError();
 

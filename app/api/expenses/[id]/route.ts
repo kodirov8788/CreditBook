@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { badRequest, serverError, unauthorized } from "@/lib/api/response";
-import { getAuthenticatedClient } from "@/lib/api/auth";
+import { getAuthenticatedClient, requireShopPermission } from "@/lib/api/auth";
 
 type Context = { params: Promise<{ id: string }> };
 const expenseSelect = "id, category, amount, spent_at, vendor, note, payment_method, voided_at, void_reason, created_at";
@@ -10,6 +10,8 @@ export async function PATCH(request: Request, context: Context) {
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
   const body = await request.json().catch(() => null) as { category?: string; amount?: number; spentAt?: string; vendor?: string; note?: string; paymentMethod?: string; void?: boolean; reason?: string } | null;
+  const access = await requireShopPermission(supabase, user, body?.void ? "expense.void" : "expense.update");
+  if (!access.ok) return access.response;
   if (body?.void) {
     const { data, error } = await supabase.from("expenses").update({ voided_at: new Date().toISOString(), void_reason: body.reason?.trim() || "Foydalanuvchi tuzatishi" }).eq("id", id).is("voided_at", null).select(expenseSelect).single();
     if (error || !data) return serverError();

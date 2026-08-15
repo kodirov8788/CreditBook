@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { badRequest, serverError, unauthorized } from "@/lib/api/response";
-import { getAuthenticatedClient } from "@/lib/api/auth";
+import { getAuthenticatedClient, requireShopPermission } from "@/lib/api/auth";
 
 type Context = { params: Promise<{ id: string }> };
 const reminderSelect = "id, customer_id, debt_id, channel, scheduled_for, sent_at, status, error_reason, message, created_at, customers(name, phone)";
@@ -9,6 +9,8 @@ export async function PATCH(request: Request, context: Context) {
   const { id } = await context.params;
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
+  const access = await requireShopPermission(supabase, user, "reminder.update");
+  if (!access.ok) return access.response;
   const body = await request.json().catch(() => null) as { scheduledFor?: string; message?: string; channel?: string; status?: string; errorReason?: string } | null;
   const updates: Record<string, string | null> = {};
   if (body?.scheduledFor) {
