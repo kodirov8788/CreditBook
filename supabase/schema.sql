@@ -71,7 +71,8 @@ create table if not exists public.reminders (
   channel text not null default 'manual' check (channel in ('manual', 'sms', 'whatsapp', 'email')),
   scheduled_for timestamptz,
   sent_at timestamptz,
-  status text not null default 'pending' check (status in ('pending', 'sent', 'cancelled')),
+  status text not null default 'pending' check (status in ('pending', 'sent', 'failed', 'cancelled')),
+  error_reason text,
   message text,
   created_at timestamptz not null default now()
 );
