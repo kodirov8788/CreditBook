@@ -3,6 +3,7 @@ import { badRequest, forbidden, serverError, unauthorized } from "@/lib/api/resp
 import { getAuthenticatedClient, requireShopPermission } from "@/lib/api/auth";
 import { createServiceClient } from "@/lib/admin";
 import { TEAM_ROLES } from "@/lib/team-roles";
+import { recordAudit } from "@/lib/audit";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -28,5 +29,6 @@ export async function PATCH(request: Request, context: Context) {
   if (!Object.keys(updates).length) return badRequest("O‘zgarish kiriting.");
   const { data, error } = await service.from("shop_members").update(updates).eq("id", id).eq("shop_id", access.shopId).select("id, role, status").single();
   if (error || !data) return serverError();
+  await recordAudit(service, { actorUserId: user.id, shopId: access.shopId, entityType: "membership", entityId: id, action: "membership.updated", metadata: { userId: current.user_id, before: { role: current.role, status: current.status }, after: updates } });
   return NextResponse.json({ member: data });
 }

@@ -3,6 +3,7 @@ import { badRequest, serverError, unauthorized } from "@/lib/api/response";
 import { getAuthenticatedClient, requireShopPermission } from "@/lib/api/auth";
 import { createServiceClient } from "@/lib/admin";
 import { TEAM_ROLES } from "@/lib/team-roles";
+import { recordAudit } from "@/lib/audit";
 
 const inviteRoles = TEAM_ROLES.filter((role) => role !== "shop_owner");
 
@@ -48,5 +49,6 @@ export async function POST(request: Request) {
     if (error?.code === "23505") return NextResponse.json({ error: "Bu email uchun shop a’zoligi allaqachon bor." }, { status: 409 });
     return serverError();
   }
+  await recordAudit(service, { actorUserId: user.id, shopId: access.shopId, entityType: "membership", entityId: member.id, action: "membership.invited", metadata: { userId: invited.user.id, role } });
   return NextResponse.json({ member: { ...member, user: { id: invited.user.id, email, fullName: null } } }, { status: 201 });
 }
