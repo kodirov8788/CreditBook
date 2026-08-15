@@ -2,7 +2,7 @@
 /* Uzbek Latin text intentionally uses apostrophes in visible labels. */
 /* eslint-disable react/no-unescaped-entities */
 
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -40,7 +40,9 @@ type HistoryCredit = { id: string; title: string | null; principal: number; due_
 type HistoryPayment = { id: string; debt_id: string; amount: number; paid_at: string | null; note: string | null; created_at: string; voided_at: string | null; void_reason: string | null };
 type HistoryTransaction = { id: string; type: "credit" | "payment"; amount: number; description: string; occurredAt: string; dueDate: string | null; status: string | null; balanceAfter: number; voided: boolean };
 type ReminderItem = { id: string; customer_id: string; scheduled_for: string | null; status: string; message: string | null; customers?: { name?: string } | null };
-type ReportData = { from: string | null; to: string | null; newCredits: number; collected: number; outstanding: number; overdueAmount: number; overdueCount: number; activeCustomers: number };
+type ExpenseItem = { id: string; category: string; amount: number; spent_at: string; vendor: string | null; note: string | null; payment_method: string; voided_at: string | null };
+type MonthlyReport = { month: string; credits: number; collected: number; expenses: number; netCashflow: number };
+type ReportData = { from: string | null; to: string | null; newCredits: number; collected: number; expensesTotal: number; netCashflow: number; outstanding: number; overdueAmount: number; overdueCount: number; activeCustomers: number; monthly: MonthlyReport[]; expenses: ExpenseItem[] };
 type ActivityItem = { id: string; customer_id: string | null; event_type: string; description: string; created_at: string };
 type Notice = { tone: "success" | "info"; text: string } | null;
 
@@ -101,6 +103,8 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
   const [reportRange, setReportRange] = useState({ from: "", to: "" });
+  const [expenseForm, setExpenseForm] = useState({ category: "", amount: "", spentAt: new Date().toISOString().slice(0, 10), vendor: "", note: "" });
+  const [expenseError, setExpenseError] = useState("");
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", amount: "", dueDate: "" });
   const [formError, setFormError] = useState("");
@@ -347,6 +351,30 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     if (!response.ok || !payload?.report) setReportError(payload?.error || "Hisobot olinmadi.");
     else setReport(payload.report);
     setReportLoading(false);
+  }
+
+  async function saveExpense(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setExpenseError("");
+    const response = await fetch("/api/expenses", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category: expenseForm.category, amount: Number(expenseForm.amount), spentAt: expenseForm.spentAt, vendor: expenseForm.vendor, note: expenseForm.note }) });
+    const payload = await response.json().catch(() => null) as { error?: string } | null;
+    if (!response.ok) {
+      setExpenseError(payload?.error || "Xarajat saqlanmadi.");
+      return;
+    }
+    setExpenseForm({ category: "", amount: "", spentAt: new Date().toISOString().slice(0, 10), vendor: "", note: "" });
+    setNotice({ tone: "success", text: "Xarajat saqlandi." });
+    void loadReport(reportRange);
+  }
+
+  async function voidExpense(id: string) {
+    const response = await fetch(`/api/expenses/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ void: true, reason: "Foydalanuvchi tuzatishi" }) });
+    if (!response.ok) {
+      setExpenseError("Xarajat bekor qilinmadi.");
+      return;
+    }
+    setNotice({ tone: "success", text: "Xarajat bekor qilindi." });
+    void loadReport(reportRange);
   }
 
   async function recordActivity(customerId: string | null, eventType: string, description: string) {
@@ -662,7 +690,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
 
       {moreView === "reminders" && <div className="modal-backdrop" role="presentation" onClick={() => setMoreView(null)}><div className="modal more-modal" role="dialog" aria-modal="true" aria-labelledby="reminders-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Vaqtida eslatma</div><h2 id="reminders-title">Eslatmalar</h2></div><button className="icon-button" onClick={() => setMoreView(null)} aria-label="Eslatmalarni yopish"><X size={19} /></button></div><form onSubmit={saveReminder}><div className="field-grid"><div className="field full"><label htmlFor="reminder-customer">Mijoz</label><select id="reminder-customer" value={reminderForm.customerId} onChange={(event) => setReminderForm({ ...reminderForm, customerId: event.target.value })}><option value="">Mijozni tanlang</option>{customers.filter((customer) => customer.balance > 0).map((customer) => <option key={customer.id} value={customer.id}>{customer.name} · {formatMoney(customer.balance)}</option>)}</select></div><div className="field full"><label htmlFor="reminder-date">Eslatma vaqti</label><input id="reminder-date" type="datetime-local" value={reminderForm.scheduledFor} onChange={(event) => setReminderForm({ ...reminderForm, scheduledFor: event.target.value })} /></div><div className="field full"><label htmlFor="reminder-message">Xabar <span>(ixtiyoriy)</span></label><input id="reminder-message" value={reminderForm.message} onChange={(event) => setReminderForm({ ...reminderForm, message: event.target.value })} placeholder="Masalan: qarz muddatini eslatish" /></div></div>{reminderError && <div className="form-error" role="alert">{reminderError}</div>}<div className="modal-actions"><button type="submit" className="button button-primary">Eslatma qo'shish</button></div></form><div className="reminder-list"><div className="section-label">Kutilayotgan eslatmalar</div>{reminderLoading ? <div className="history-loading">Yuklanmoqda...</div> : reminders.length ? reminders.map((reminder) => <div className="reminder-item" key={reminder.id}><div><strong>{reminder.customers?.name || "Mijoz"}</strong><small>{reminder.scheduled_for ? formatHistoryDate(reminder.scheduled_for) : "Vaqt belgilanmagan"}{reminder.message ? ` · ${reminder.message}` : ""}</small></div><button className="text-button" onClick={() => void cancelReminder(reminder.id)}>Bekor</button></div>) : <div className="history-empty compact-history"><Bell size={20} /><span>Kutilayotgan eslatma yo'q.</span></div>}</div></div></div>}
 
-      {moreView === "reports" && <div className="modal-backdrop" role="presentation" onClick={() => setMoreView(null)}><div className="modal more-modal" role="dialog" aria-modal="true" aria-labelledby="reports-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Raqamlar</div><h2 id="reports-title">Hisobot</h2></div><button className="icon-button" onClick={() => setMoreView(null)} aria-label="Hisobotni yopish"><X size={19} /></button></div><div className="report-filters"><div className="field"><label htmlFor="report-from">Boshlanish</label><input id="report-from" type="date" value={reportRange.from} onChange={(event) => setReportRange({ ...reportRange, from: event.target.value })} /></div><div className="field"><label htmlFor="report-to">Tugash</label><input id="report-to" type="date" value={reportRange.to} onChange={(event) => setReportRange({ ...reportRange, to: event.target.value })} /></div><button className="button button-secondary" onClick={() => void loadReport(reportRange)}>{reportLoading ? "..." : "Ko'rsatish"}</button></div>{reportError && <div className="form-error" role="alert">{reportError}</div>}{report && <div className="report-grid"><StatCard label="Yangi qarz" value={formatMoney(report.newCredits)} icon={<Plus size={17} />} foot="Tanlangan davr" /><StatCard label="Yig'ilgan" value={formatMoney(report.collected)} icon={<Check size={17} />} foot="Tanlangan davr" /><StatCard label="Jami qoldiq" value={formatMoney(report.outstanding)} icon={<WalletCards size={17} />} foot="Faol qarzlar" /><StatCard label="Kechikkan" value={formatMoney(report.overdueAmount)} icon={<Clock3 size={17} />} foot={`${report.overdueCount} ta yozuv`} /><StatCard label="Faol mijoz" value={String(report.activeCustomers)} icon={<Users size={17} />} foot="Qoldig'i bor" /></div>}</div></div>}
+      {moreView === "reports" && <div className="modal-backdrop" role="presentation" onClick={() => setMoreView(null)}><div className="modal more-modal" role="dialog" aria-modal="true" aria-labelledby="reports-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Raqamlar</div><h2 id="reports-title">Hisobot</h2></div><button className="icon-button" onClick={() => setMoreView(null)} aria-label="Hisobotni yopish"><X size={19} /></button></div><ReportPanel report={report} reportLoading={reportLoading} reportError={reportError} reportRange={reportRange} setReportRange={setReportRange} expenseForm={expenseForm} setExpenseForm={setExpenseForm} expenseError={expenseError} onRefresh={() => void loadReport(reportRange)} onSaveExpense={saveExpense} onVoidExpense={voidExpense} /></div></div>}
     </div>
   );
 }
@@ -674,6 +702,20 @@ function StatCard({ label, value, icon, foot, footClass = "" }: { label: string;
 function TransactionRow({ transaction, onReverse, reversing = false }: { transaction: HistoryTransaction; onReverse?: (transaction: HistoryTransaction) => void; reversing?: boolean }) {
   const isCredit = transaction.type === "credit";
   return <article className={`history-row ${transaction.type} ${transaction.voided ? "voided" : ""}`}><span className={`history-type-icon ${transaction.type}`} aria-hidden="true">{isCredit ? <Plus size={16} /> : <Check size={16} />}</span><div className="history-row-copy"><div className="history-row-title"><strong>{transaction.description}</strong><span>{transaction.voided ? "Bekor qilingan" : isCredit ? "Qarz" : "To'lov"}</span></div><small>{formatHistoryDate(transaction.occurredAt)}{isCredit && transaction.dueDate ? ` · Muddat ${formatDate(transaction.dueDate)}` : ""}</small></div><div className="history-row-values"><strong className="money">{transaction.voided ? "Bekor" : `${isCredit ? "+" : "−"}${formatMoney(transaction.amount)}`}</strong><small>Qoldiq {formatMoney(transaction.balanceAfter)}</small></div>{onReverse && !transaction.voided && <button className="text-button history-reverse" onClick={() => onReverse(transaction)} disabled={reversing}>{reversing ? "..." : "Bekor qilish"}</button>}</article>;
+}
+
+function ReportPanel({ report, reportLoading, reportError, reportRange, setReportRange, expenseForm, setExpenseForm, expenseError, onRefresh, onSaveExpense, onVoidExpense }: { report: ReportData | null; reportLoading: boolean; reportError: string; reportRange: { from: string; to: string }; setReportRange: Dispatch<SetStateAction<{ from: string; to: string }>>; expenseForm: { category: string; amount: string; spentAt: string; vendor: string; note: string }; setExpenseForm: Dispatch<SetStateAction<{ category: string; amount: string; spentAt: string; vendor: string; note: string }>>; expenseError: string; onRefresh: () => void; onSaveExpense: (event: FormEvent<HTMLFormElement>) => void; onVoidExpense: (id: string) => void }) {
+  const maxBar = Math.max(...(report?.monthly ?? []).flatMap((item) => [item.collected, item.expenses]), 1);
+  return <>
+    <div className="report-filters"><div className="field"><label htmlFor="report-from">Boshlanish</label><input id="report-from" type="date" value={reportRange.from} onChange={(event) => setReportRange({ ...reportRange, from: event.target.value })} /></div><div className="field"><label htmlFor="report-to">Tugash</label><input id="report-to" type="date" value={reportRange.to} onChange={(event) => setReportRange({ ...reportRange, to: event.target.value })} /></div><button className="button button-secondary" onClick={onRefresh}>{reportLoading ? "..." : "Ko'rsatish"}</button></div>
+    {reportError && <div className="form-error" role="alert">{reportError}</div>}
+    {report && <>
+      <div className="report-grid"><StatCard label="Naqd tushum" value={formatMoney(report.collected)} icon={<Check size={17} />} foot="Faol to'lovlar" /><StatCard label="Xarajat" value={formatMoney(report.expensesTotal)} icon={<ArrowDownToLine size={17} />} foot="Faol xarajatlar" /><StatCard label="Sof cashflow" value={formatMoney(report.netCashflow)} icon={<WalletCards size={17} />} foot="Tushum − xarajat" /><StatCard label="Qoldiq qarz" value={formatMoney(report.outstanding)} icon={<Clock3 size={17} />} foot={`${report.overdueCount} ta kechikkan`} /><StatCard label="Yangi qarz" value={formatMoney(report.newCredits)} icon={<Plus size={17} />} foot="Receivable yozuvi" /></div>
+      <section className="report-chart"><div className="section-label">Oylar bo'yicha cashflow</div>{report.monthly.length ? report.monthly.map((item) => <div className="chart-row" key={item.month}><strong>{item.month}</strong><div className="chart-bars"><span className="chart-bar income" style={{ width: `${Math.max((item.collected / maxBar) * 100, item.collected ? 3 : 0)}%` }} title={`Tushum ${formatMoney(item.collected)}`} /><span className="chart-bar expense" style={{ width: `${Math.max((item.expenses / maxBar) * 100, item.expenses ? 3 : 0)}%` }} title={`Xarajat ${formatMoney(item.expenses)}`} /></div><small>{formatMoney(item.netCashflow)}</small></div>) : <div className="history-empty compact-history">Bu davrda ma'lumot yo'q.</div>}<div className="chart-legend"><span className="income-dot" />Tushum <span className="expense-dot" />Xarajat</div></section>
+      <section className="expense-section"><div className="section-label">Xarajat qo'shish</div><form onSubmit={onSaveExpense}><div className="field-grid"><div className="field"><label htmlFor="expense-category">Tur</label><select id="expense-category" value={expenseForm.category} onChange={(event) => setExpenseForm({ ...expenseForm, category: event.target.value })}><option value="">Tanlang</option><option value="Tovar">Tovar</option><option value="Ijara">Ijara</option><option value="Transport">Transport</option><option value="Kommunal">Kommunal</option><option value="Boshqa">Boshqa</option></select></div><div className="field"><label htmlFor="expense-amount">Summa</label><input id="expense-amount" type="number" min="1" required value={expenseForm.amount} onChange={(event) => setExpenseForm({ ...expenseForm, amount: event.target.value })} placeholder="0" /></div><div className="field"><label htmlFor="expense-date">Sana</label><input id="expense-date" type="date" required value={expenseForm.spentAt} onChange={(event) => setExpenseForm({ ...expenseForm, spentAt: event.target.value })} /></div><div className="field"><label htmlFor="expense-vendor">Kimga <span>(ixtiyoriy)</span></label><input id="expense-vendor" value={expenseForm.vendor} onChange={(event) => setExpenseForm({ ...expenseForm, vendor: event.target.value })} placeholder="Yetkazuvchi" /></div><div className="field full"><label htmlFor="expense-note">Izoh <span>(ixtiyoriy)</span></label><input id="expense-note" value={expenseForm.note} onChange={(event) => setExpenseForm({ ...expenseForm, note: event.target.value })} placeholder="Masalan: do'kon ijara haqi" /></div></div>{expenseError && <div className="form-error" role="alert">{expenseError}</div>}<button className="button button-primary" type="submit">Xarajatni saqlash</button></form></section>
+      <section className="expense-section"><div className="section-label">Xarajatlar tarixi</div>{report.expenses.length ? report.expenses.map((expense) => <div className="reminder-item" key={expense.id}><div><strong>{expense.category} · {formatMoney(Number(expense.amount))}</strong><small>{expense.spent_at}{expense.vendor ? ` · ${expense.vendor}` : ""}{expense.note ? ` · ${expense.note}` : ""}</small></div><button className="text-button" onClick={() => onVoidExpense(expense.id)}>Bekor</button></div>) : <div className="history-empty compact-history">Xarajat yozilmagan.</div>}</section>
+    </>}
+  </>;
 }
 
 function ActivityRow({ activity }: { activity: ActivityItem }) {
