@@ -26,6 +26,7 @@ import {
 import { createClient, hasSupabaseEnv } from "@/lib/supabase/browser";
 import { getCustomerStatus } from "@/lib/customer-status";
 import type { DashboardCustomer, DashboardStats } from "@/lib/types";
+import ActivityFeed from "@/components/activity-feed";
 
 const money = new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 0 });
 const dateFormatter = new Intl.DateTimeFormat("uz-UZ", { month: "short", day: "numeric" });
@@ -322,6 +323,8 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     }
     setReminderForm({ customerId: "", scheduledFor: "", message: "" });
     setNotice({ tone: "success", text: "Eslatma saqlandi." });
+    const customer = customers.find((item) => item.id === reminderForm.customerId);
+    void recordActivity(reminderForm.customerId, "reminder", `${customer?.name || "Mijoz"} uchun eslatma saqlandi.`);
     void loadReminders();
   }
 
@@ -333,6 +336,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     }
     setReminders((current) => current.filter((reminder) => reminder.id !== id));
     setNotice({ tone: "success", text: "Eslatma bekor qilindi." });
+    void recordActivity(null, "reminder", "Eslatma bekor qilindi.");
   }
 
   async function loadReport(range: { from: string; to: string }) {
@@ -364,6 +368,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     }
     setExpenseForm({ category: "", amount: "", spentAt: new Date().toISOString().slice(0, 10), vendor: "", note: "" });
     setNotice({ tone: "success", text: "Xarajat saqlandi." });
+    void recordActivity(null, "expense", `${expenseForm.category} uchun ${formatMoney(Number(expenseForm.amount))} xarajat yozildi.`);
     void loadReport(reportRange);
   }
 
@@ -374,11 +379,12 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
       return;
     }
     setNotice({ tone: "success", text: "Xarajat bekor qilindi." });
+    void recordActivity(null, "expense", "Xarajat bekor qilindi.");
     void loadReport(reportRange);
   }
 
   async function recordActivity(customerId: string | null, eventType: string, description: string) {
-    const localActivity: ActivityItem = { id: `local-${Date.now()}-${Math.random()}`, customer_id: customerId, event_type: eventType, description, created_at: new Date().toISOString() };
+    const localActivity: ActivityItem = { id: `local-${eventType}-${customerId ?? "general"}-${description}`, customer_id: customerId, event_type: eventType, description, created_at: new Date().toISOString() };
     if (liveMode) {
       const response = await fetch("/api/activity", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customerId, eventType, description }) });
       const payload = await response.json().catch(() => null) as { activity?: ActivityItem } | null;
@@ -659,10 +665,11 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
               <div className="customer-list">{filteredCustomers.length ? filteredCustomers.map((customer) => <CustomerRow customer={customer} key={customer.id} onAction={openQuickAction} onOpen={() => openCustomerDetails(customer)} />) : <div className="empty"><Users size={28} /><strong>Mijoz topilmadi.</strong><span>Boshqa ism yoki telefon bilan qidiring.</span><button className="button button-secondary" onClick={openAddCustomer}><Plus size={16} />Mijoz qo'shish</button></div>}</div>
             </div>}
 
-            {(initialView === "dashboard" || initialView === "activity") && <div className="panel activity-panel" id="activity">
+            {initialView === "dashboard" && <div className="panel activity-panel" id="activity">
               <div className="panel-heading"><div><div className="panel-title">So'nggi ishlar</div><div className="panel-subtitle">Daftardagi oxirgi o'zgarishlar</div></div><BookOpen size={18} className="panel-icon" /></div>
               <div className="activity-list">{activities.length ? activities.map((activity) => <ActivityRow activity={activity} key={activity.id} />) : <div className="empty compact"><BookOpen size={26} /><strong>{liveMode ? "Faoliyat shu yerda chiqadi." : "Supabase ulanishi kerak."}</strong><span>{liveMode ? "Yangi qarz yoki to'lov yozing." : "Haqiqiy ma'lumotlar uchun login qiling."}</span></div>}</div>
             </div>}
+            {initialView === "activity" && <ActivityFeed initialActivities={activities} customers={customers} liveMode={liveMode} />}
           </section>
         </div>
       </main>
