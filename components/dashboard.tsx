@@ -832,7 +832,7 @@ function ReportPanel({ report, reportLoading, reportError, reportRange, setRepor
 }
 
 function ActivityRow({ activity }: { activity: ActivityItem }) {
-  return <article className="activity-item"><span className={`activity-dot ${activity.event_type}`} aria-hidden="true" /><div><div className="activity-text">{activity.description}</div><div className="activity-time">{formatHistoryDate(activity.created_at)}</div></div></article>;
+  return <article className="activity-item"><span className={`activity-dot ${activity.event_type}`} aria-hidden="true" /><div><div className="activity-text">{activity.description}</div><div className="activity-time" suppressHydrationWarning>{formatHistoryDate(activity.created_at)}</div></div></article>;
 }
 
 function CustomerRow({ customer, onAction, onOpen }: { customer: DashboardCustomer; onAction: (type: QuickAction, customer: DashboardCustomer) => void; onOpen: () => void }) {
