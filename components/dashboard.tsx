@@ -46,6 +46,10 @@ type MonthlyReport = { month: string; credits: number; collected: number; expens
 type ReportData = { from: string | null; to: string | null; newCredits: number; collected: number; expensesTotal: number; netCashflow: number; outstanding: number; overdueAmount: number; overdueCount: number; activeCustomers: number; monthly: MonthlyReport[]; expenses: ExpenseItem[] };
 type ActivityItem = { id: string; customer_id: string | null; event_type: string; description: string; created_at: string };
 type Notice = { tone: "success" | "info"; text: string } | null;
+type HistoryCacheEntry = { transactions: HistoryTransaction[]; savedAt: number };
+
+const historyCache = new Map<string, HistoryCacheEntry>();
+const HISTORY_CACHE_TTL = 30_000;
 
 function formatMoney(value: number) {
   return `${money.format(value)} so'm`;
@@ -122,13 +126,13 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   const [reminderSaving, setReminderSaving] = useState(false);
   const [reminderActionId, setReminderActionId] = useState<string | null>(null);
   const [reminderError, setReminderError] = useState("");
-  const [reminderForm, setReminderForm] = useState({ customerId: "", scheduledFor: nextHourInputValue(), message: "", channel: "manual" });
+  const [reminderForm, setReminderForm] = useState({ customerId: "", scheduledFor: "", message: "", channel: "manual" });
   const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
   const [report, setReport] = useState<ReportData | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
-  const [reportRange, setReportRange] = useState(currentMonthRange);
-  const [expenseForm, setExpenseForm] = useState({ category: "", amount: "", spentAt: localDateInputValue(), vendor: "", note: "" });
+  const [reportRange, setReportRange] = useState({ from: "", to: "" });
+  const [expenseForm, setExpenseForm] = useState({ category: "", amount: "", spentAt: "", vendor: "", note: "" });
   const [expenseError, setExpenseError] = useState("");
   const [expenseSaving, setExpenseSaving] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -153,6 +157,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   const [notice, setNotice] = useState<Notice>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [activeSection, setActiveSection] = useState(initialView === "reminders" || initialView === "reports" ? "more" : initialView);
+  const [todayLabel, setTodayLabel] = useState("Bugun");
   const supabase = hasSupabaseEnv() ? createClient() : null;
   const router = useRouter();
 
@@ -165,6 +170,16 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     window.addEventListener("hashchange", syncActiveSection);
     return () => window.removeEventListener("hashchange", syncActiveSection);
   }, [initialView]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setTodayLabel(formatToday());
+      setReportRange(currentMonthRange());
+      setExpenseForm((current) => ({ ...current, spentAt: current.spentAt || localDateInputValue() }));
+      setReminderForm((current) => ({ ...current, scheduledFor: current.scheduledFor || nextHourInputValue() }));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const filteredCustomers = useMemo(() => customers.filter((customer) => `${customer.name} ${customer.phone}`.toLowerCase().includes(search.toLowerCase())), [customers, search]);
   const entryOptions = useMemo(() => {
@@ -195,7 +210,12 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
 
   async function loadCustomerHistory(customer: DashboardCustomer) {
     setHistoryCustomerId(customer.id);
-    setHistoryLoading(true);
+    const cached = historyCache.get(customer.id);
+    const hasFreshCache = cached && Date.now() - cached.savedAt < HISTORY_CACHE_TTL;
+    if (hasFreshCache) {
+      setHistoryTransactions(cached.transactions);
+    }
+    setHistoryLoading(!hasFreshCache);
     setHistoryError("");
 
     if (!liveMode) {
@@ -221,7 +241,9 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
       setHistoryTransactions([]);
       setHistoryError("Tarix olinmadi. Qayta urinib ko'ring.");
     } else {
-      setHistoryTransactions(normalizeHistory((credits ?? []) as HistoryCredit[], (payments ?? []) as HistoryPayment[]));
+      const transactions = normalizeHistory((credits ?? []) as HistoryCredit[], (payments ?? []) as HistoryPayment[]);
+      historyCache.set(customer.id, { transactions, savedAt: Date.now() });
+      setHistoryTransactions(transactions);
     }
     setHistoryLoading(false);
   }
@@ -536,6 +558,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     if (!liveMode) return null;
     const response = await fetch(`/api/customers/${customer.id}/payments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount, note: note.trim() || null }) });
     const payload = await response.json().catch(() => null) as { error?: string } | null;
+    if (response.ok) historyCache.delete(customer.id);
     return response.ok ? null : payload?.error || "To'lov yozilmadi. Qayta urinib ko'ring.";
   }
 
@@ -543,6 +566,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     if (!liveMode) return null;
     const response = await fetch(`/api/customers/${customer.id}/credits`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount, dueDate, title: title.trim() || "Qarz" }) });
     const payload = await response.json().catch(() => null) as { error?: string } | null;
+    if (response.ok) historyCache.delete(customer.id);
     return response.ok ? null : payload?.error || "Qarz yozilmadi. Qayta urinib ko'ring.";
   }
 
@@ -706,7 +730,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
       <main className="main-area">
         <header className="topbar">
           <div className="mobile-brand"><div className="brand-mark">C</div><strong>CreditBook</strong></div>
-          <div className="topbar-copy"><div className="topbar-title">{formatToday()}</div><div className="topbar-subtitle">Qarzlarni oson nazorat qiling.</div></div>
+          <div className="topbar-copy"><div className="topbar-title">{todayLabel}</div><div className="topbar-subtitle">Qarzlarni oson nazorat qiling.</div></div>
           <div className="user-chip"><span>{userEmail ?? "Sinov rejimi"}</span><div className="avatar">{userEmail ? initials(userEmail) : "SR"}</div><button className="icon-button mobile-notice" onClick={() => setMoreOpen(true)} aria-label="Eslatmalarni ochish"><Bell size={19} /></button><button className="icon-button" onClick={() => void handleLogout()} disabled={signingOut} aria-label="Chiqish" title="Chiqish"><LogOut size={18} /></button></div>
         </header>
 

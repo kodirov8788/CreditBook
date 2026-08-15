@@ -11,12 +11,13 @@ export async function getDashboardData() {
 
   const { data: userData, error: authError } = await supabase.auth.getUser();
   if (authError || !userData.user) redirect("/login");
-  const { data: profile } = await supabase.from("profiles").select("shop_name").eq("id", userData.user.id).maybeSingle();
+  const [{ data: profile }, { data, error }, { data: activityData }] = await Promise.all([
+    supabase.from("profiles").select("shop_name").eq("id", userData.user.id).maybeSingle(),
+    supabase.from("customers").select("id, name, phone, debts(id, principal, due_date, status, payments(amount, paid_at, voided_at))").order("created_at", { ascending: false }),
+    supabase.from("activity_logs").select("id, customer_id, event_type, description, created_at").order("created_at", { ascending: false }).limit(10),
+  ]);
   const shopName = profile?.shop_name?.trim() || "Mahalla do'koni";
-  const { data, error } = await supabase.from("customers").select("id, name, phone, debts(id, principal, due_date, status, payments(amount, paid_at, voided_at))").order("created_at", { ascending: false });
   if (error) return { initialCustomers: [], initialStats: emptyStats, initialActivities: [], userEmail: userData.user.email ?? null, shopName, liveMode: true, initialError: "Ma'lumotlar olinmadi. Supabase jadval va RLS sozlamalarini tekshiring." };
-
-  const { data: activityData } = await supabase.from("activity_logs").select("id, customer_id, event_type, description, created_at").order("created_at", { ascending: false }).limit(10);
   const customers: DashboardCustomer[] = (data ?? []).map((customer) => {
     const debts = (customer.debts ?? []) as Array<{ principal: number; due_date: string | null; status: string; payments: Array<{ amount: number; paid_at: string; voided_at: string | null }> }>;
     const activeDebts = debts.filter((debt) => debt.status !== "cancelled");
