@@ -12,6 +12,13 @@ test("home route responds successfully", async ({ page }) => {
   expect(response?.status()).toBe(200);
 });
 
+test("primary app routes respond successfully", async ({ request }) => {
+  for (const path of ["/dashboard", "/customers", "/customers/test-customer", "/activity", "/reminders", "/reports"]) {
+    const response = await request.get(path);
+    expect(response.status(), path).toBe(200);
+  }
+});
+
 test("production health reports Supabase readiness", async ({ request }, testInfo) => {
   test.skip(!process.env.E2E_BASE_URL, "Production smoke test runs when E2E_BASE_URL is provided.");
   const response = await request.get("/api/health");
