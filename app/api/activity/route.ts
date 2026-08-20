@@ -7,12 +7,21 @@ type ActivityRow = {
   customer_id: string | null;
   event_type: string;
   description: string;
+  metadata?: { amount?: number | string | null; status?: string | null } | null;
   created_at: string;
   customers?: { name?: string; phone?: string | null } | null;
 };
 
 function csvCell(value: unknown) {
   return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
+function boundary(value: string, endExclusive = false) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00+05:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  if (endExclusive) date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString();
 }
 
 export async function GET(request: Request) {
@@ -35,15 +44,24 @@ export async function GET(request: Request) {
 
   let builder = supabase
     .from("activity_logs")
-    .select("id, customer_id, event_type, description, created_at, customers(name, phone)", { count: "exact" })
+    .select("id, customer_id, event_type, description, metadata, created_at, customers(name, phone)", { count: "exact" })
     .eq("shop_id", access.shopId)
     .order("created_at", { ascending: false });
   if (eventType && eventType !== "all") builder = builder.eq("event_type", eventType);
   if (customerId && customerId !== "all") builder = builder.eq("customer_id", customerId);
-  if (from) builder = builder.gte("created_at", `${from}T00:00:00.000Z`);
-  if (to) builder = builder.lt("created_at", `${to}T23:59:59.999Z`);
+  const fromBoundary = from ? boundary(from) : null;
+  const toBoundary = to ? boundary(to, true) : null;
+  if ((from && !fromBoundary) || (to && !toBoundary) || (fromBoundary && toBoundary && fromBoundary >= toBoundary)) return badRequest("Sana oralig'ini tekshiring.");
+  if (fromBoundary) builder = builder.gte("created_at", fromBoundary);
+  if (toBoundary) builder = builder.lt("created_at", toBoundary);
   const safeQuery = query?.replace(/[(),]/g, " ").trim();
-  if (safeQuery) builder = builder.or(`description.ilike.%${safeQuery}%,event_type.ilike.%${safeQuery}%`);
+  if (safeQuery) {
+    const { data: matchingCustomers, error: matchingCustomersError } = await supabase.from("customers").select("id").eq("shop_id", access.shopId).ilike("name", `%${safeQuery}%`).limit(100);
+    if (matchingCustomersError) return serverError();
+    const customerIds = (matchingCustomers ?? []).map((customer) => customer.id);
+    const customerClause = customerIds.length ? `,customer_id.in.(${customerIds.join(",")})` : "";
+    builder = builder.or(`description.ilike.%${safeQuery}%,event_type.ilike.%${safeQuery}%,metadata->>amount.ilike.%${safeQuery}%${customerClause}`);
+  }
   if (!isCsv) builder = builder.range(fromRow, fromRow + pageSize - 1);
 
   const { data, error, count } = await builder;
@@ -51,8 +69,8 @@ export async function GET(request: Request) {
   const activities = (data ?? []) as ActivityRow[];
   if (format === "csv") {
     const rows = [
-      ["Sana", "Mijoz", "Turi", "Izoh"],
-      ...activities.map((activity) => [activity.created_at, activity.customers?.name || "", activity.event_type, activity.description]),
+      ["Sana", "Mijoz", "Turi", "Miqdor", "Holat", "Izoh"],
+      ...activities.map((activity) => [activity.created_at, activity.customers?.name || "", activity.event_type, activity.metadata?.amount ?? "", activity.metadata?.status ?? "", activity.description]),
     ];
     return new NextResponse(rows.map((row) => row.map(csvCell).join(",")).join("\n"), {
       headers: {

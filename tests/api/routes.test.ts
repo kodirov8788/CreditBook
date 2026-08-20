@@ -235,18 +235,18 @@ describe("authenticated API contracts", () => {
   });
 
   it("scopes reminder updates to the current shop", async () => {
-    const single = vi.fn().mockResolvedValue({ data: { id: "reminder-1", status: "cancelled" }, error: null });
-    const select = vi.fn(() => ({ single }));
-    const eq = vi.fn(() => ({ eq, select }));
-    const update = vi.fn(() => ({ eq }));
-    const supabase = { from: vi.fn(() => ({ update })) };
+    const currentEq = vi.fn().mockReturnThis();
+    const currentQuery = { eq: currentEq, maybeSingle: vi.fn().mockResolvedValue({ data: { status: "pending", scheduled_for: "2026-08-20T00:00:00.000Z" }, error: null }) };
+    const updateEq = vi.fn().mockReturnThis();
+    const update = vi.fn(() => ({ eq: updateEq, select: vi.fn(() => ({ single: vi.fn().mockResolvedValue({ data: { id: "reminder-1", status: "cancelled" }, error: null }) })) }));
+    const supabase = { from: vi.fn().mockReturnValueOnce({ select: vi.fn(() => currentQuery) }).mockReturnValueOnce({ update }) };
     authMock.mockResolvedValue({ supabase: supabase as never, user: { id: "user-1" } as never });
 
     const response = await updateReminder(request({ status: "cancelled" }), { params: Promise.resolve({ id: "reminder-1" }) });
 
     expect(response.status).toBe(200);
-    expect(eq).toHaveBeenCalledWith("id", "reminder-1");
-    expect(eq).toHaveBeenCalledWith("shop_id", "shop-1");
+    expect(updateEq).toHaveBeenCalledWith("id", "reminder-1");
+    expect(updateEq).toHaveBeenCalledWith("shop_id", "shop-1");
   });
 
   it("protects reports with authentication", async () => {
