@@ -22,7 +22,7 @@ export async function recordAudit(client: SupabaseClient, event: AuditEvent) {
 
   if (error) {
     console.error("Audit log yozilmadi:", error.message);
-    return false;
+    throw new Error("Audit log yozilmadi.");
   }
   return true;
 }
