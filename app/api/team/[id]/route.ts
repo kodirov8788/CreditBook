@@ -54,7 +54,7 @@ export async function POST(request: Request, context: Context) {
   const redirectTo = new URL("/auth/callback", origin);
   redirectTo.searchParams.set("next", "/team");
   redirectTo.searchParams.set("shop_id", access.shopId);
-  const { error } = await service.auth.admin.inviteUserByEmail(invitedUser.email, { redirectTo: redirectTo.toString() });
+  const { error } = await service.auth.admin.inviteUserByEmail(invitedUser.email, { redirectTo: redirectTo.toString(), data: { creditbook_invite_shop_id: access.shopId } });
   if (error) return NextResponse.json({ error: error.message || "Taklif qayta yuborilmadi." }, { status: 400 });
   await recordAudit(service, { actorUserId: user.id, shopId: access.shopId, entityType: "membership", entityId: id, action: "membership.invite_resent", metadata: { userId: current.user_id } });
   return NextResponse.json({ ok: true });

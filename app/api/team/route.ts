@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   const redirectTo = new URL("/auth/callback", origin);
   redirectTo.searchParams.set("next", "/team");
   redirectTo.searchParams.set("shop_id", access.shopId);
-  const { data: invited, error: inviteError } = await service.auth.admin.inviteUserByEmail(email, { redirectTo: redirectTo.toString() });
+  const { data: invited, error: inviteError } = await service.auth.admin.inviteUserByEmail(email, { redirectTo: redirectTo.toString(), data: { creditbook_invite_shop_id: access.shopId } });
   if (inviteError || !invited.user) return NextResponse.json({ error: inviteError?.message || "Taklif yuborilmadi." }, { status: 400 });
   const { data: member, error } = await service.from("shop_members").insert({ shop_id: access.shopId, user_id: invited.user.id, role, status: "invited", invited_by: user.id }).select("id, user_id, role, status").single();
   if (error || !member) {

@@ -337,6 +337,19 @@ describe("authenticated API contracts", () => {
     expect(serviceClientMock).not.toHaveBeenCalled();
   });
 
+  it("marks team invitations so the new-user trigger skips owner-shop bootstrap", async () => {
+    const inviteUserByEmail = vi.fn().mockResolvedValue({ data: { user: { id: "user-2" } }, error: null });
+    const single = vi.fn().mockResolvedValue({ data: { id: "membership-1", user_id: "user-2", role: "cashier", status: "invited" }, error: null });
+    const insert = vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single }) });
+    serviceClientMock.mockReturnValue({ auth: { admin: { inviteUserByEmail } }, from: vi.fn().mockReturnValue({ insert }) } as never);
+    authMock.mockResolvedValue({ supabase: { from: vi.fn() } as never, user: { id: "user-1" } as never });
+
+    const response = await inviteTeam(request({ email: "worker@example.com", role: "cashier" }));
+
+    expect(response.status).toBe(201);
+    expect(inviteUserByEmail).toHaveBeenCalledWith("worker@example.com", expect.objectContaining({ data: { creditbook_invite_shop_id: "shop-1" } }));
+  });
+
   it("protects shop name updates with owner permission and validation", async () => {
     authMock.mockResolvedValue({ supabase: { from: vi.fn() } as never, user: { id: "user-1" } as never });
     const invalidResponse = await updateShop(request({ name: "A" }));
