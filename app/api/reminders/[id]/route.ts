@@ -12,6 +12,9 @@ export async function PATCH(request: Request, context: Context) {
   const access = await requireShopPermission(supabase, user, "reminder.update");
   if (!access.ok) return access.response;
   const body = await request.json().catch(() => null) as { scheduledFor?: string; message?: string; channel?: string; status?: string; errorReason?: string } | null;
+  const { data: currentReminder, error: currentError } = await supabase.from("reminders").select("status, scheduled_for").eq("id", id).eq("shop_id", access.shopId).maybeSingle();
+  if (currentError) return serverError();
+  if (!currentReminder) return NextResponse.json({ error: "Eslatma topilmadi." }, { status: 404 });
   const updates: Record<string, string | null> = {};
   if (body?.scheduledFor) {
     const scheduledFor = new Date(body.scheduledFor);
@@ -26,9 +29,22 @@ export async function PATCH(request: Request, context: Context) {
   }
   if (body?.status) {
     if (!["pending", "sent", "failed", "cancelled"].includes(body.status)) return badRequest("Eslatma holati noto'g'ri.");
+    const allowedTransitions: Record<string, string[]> = {
+      pending: ["pending", "sent", "failed", "cancelled"],
+      sent: ["sent"],
+      failed: ["failed", "pending"],
+      cancelled: ["cancelled", "pending"],
+    };
+    if (!allowedTransitions[currentReminder.status]?.includes(body.status)) return badRequest("Eslatma holatini bu tarzda o'zgartirib bo'lmaydi.");
+    if (["failed", "cancelled"].includes(currentReminder.status) && body.status === "pending" && !body.scheduledFor) return badRequest("Qayta rejalash uchun yangi muddatni kiriting.");
     updates.status = body.status;
     updates.sent_at = body.status === "sent" ? new Date().toISOString() : null;
     if (body.status === "sent") updates.error_reason = null;
+  }
+  if (body?.scheduledFor && ["failed", "cancelled"].includes(currentReminder.status)) {
+    updates.status = "pending";
+    updates.sent_at = null;
+    updates.error_reason = null;
   }
   if (!Object.keys(updates).length) return badRequest("O'zgartirish kiriting.");
 
