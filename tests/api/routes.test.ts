@@ -206,6 +206,45 @@ describe("authenticated API contracts", () => {
     expect(response.status).toBe(401);
   });
 
+  it("keeps monthly report rows inside the selected date range", async () => {
+    const query = (data: unknown[]) => {
+      const builder = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        then: (resolve: (value: unknown) => unknown) => resolve({ data, error: null }),
+      };
+      return builder;
+    };
+    const datasets: Record<string, unknown[]> = {
+      debts: [
+        { id: "debt-old", customer_id: "customer-1", principal: 100, due_date: null, status: "open", created_at: "2026-08-01T10:00:00.000Z" },
+        { id: "debt-in-range", customer_id: "customer-1", principal: 200, due_date: null, status: "open", created_at: "2026-08-20T10:00:00.000Z" },
+        { id: "debt-future", customer_id: "customer-1", principal: 300, due_date: null, status: "open", created_at: "2026-08-31T10:00:00.000Z" },
+      ],
+      payments: [
+        { debt_id: "debt-old", amount: 50, paid_at: "2026-08-01T11:00:00.000Z", voided_at: null },
+        { debt_id: "debt-in-range", amount: 75, paid_at: "2026-08-21T11:00:00.000Z", voided_at: null },
+        { debt_id: "debt-future", amount: 125, paid_at: "2026-08-31T11:00:00.000Z", voided_at: null },
+      ],
+      expenses: [
+        { id: "expense-old", category: "Ijara", amount: 20, spent_at: "2026-08-01", vendor: null, note: null, payment_method: "cash", voided_at: null, void_reason: null, created_at: "2026-08-01T08:00:00.000Z" },
+        { id: "expense-in-range", category: "Transport", amount: 10, spent_at: "2026-08-20", vendor: null, note: null, payment_method: "cash", voided_at: null, void_reason: null, created_at: "2026-08-20T08:00:00.000Z" },
+      ],
+    };
+    const supabase = { from: vi.fn((table: string) => query(datasets[table] ?? [])) };
+    authMock.mockResolvedValue({ supabase: supabase as never, user: { id: "user-1" } as never });
+
+    const response = await getReport(new Request("http://localhost/api/reports?from=2026-08-20&to=2026-08-21"));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.report.newCredits).toBe(200);
+    expect(payload.report.collected).toBe(75);
+    expect(payload.report.expensesTotal).toBe(10);
+    expect(payload.report.monthly).toEqual([{ month: "2026-08", credits: 200, collected: 75, expenses: 10, netCashflow: 65 }]);
+  });
+
   it("validates expenses before writing", async () => {
     const supabase = { from: vi.fn() };
     authMock.mockResolvedValue({ supabase: supabase as never, user: { id: "user-1" } as never });
