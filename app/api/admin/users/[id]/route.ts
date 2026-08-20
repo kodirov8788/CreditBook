@@ -20,7 +20,8 @@ export async function PATCH(request: Request, context: Context) {
       if ((count ?? 0) <= 1) return NextResponse.json({ error: "Oxirgi shop owner rolini pasaytirib bo‘lmaydi." }, { status: 400 });
     }
     const { data, error } = await admin.client.from("shop_members").update({ role: body.role }).eq("shop_id", body.shopId).eq("user_id", id).select("id, role").single();
-    if (error || !data) return serverError();
+    if (error) return error.code === "23514" ? NextResponse.json({ error: error.message }, { status: 400 }) : serverError();
+    if (!data) return serverError();
     await recordAudit(admin.client, { actorUserId: admin.user.id, shopId: body.shopId, entityType: "membership", entityId: data.id, action: "membership.role_changed", metadata: { userId: id, role: body.role } });
     return NextResponse.json({ membership: data });
   }
