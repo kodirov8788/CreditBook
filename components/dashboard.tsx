@@ -312,6 +312,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
         collectedThisMonth: transaction.type === "payment" && transaction.occurredAt.slice(0, 7) === new Date().toISOString().slice(0, 7) ? Math.max(current.collectedThisMonth - transaction.amount, 0) : current.collectedThisMonth,
       }));
       setNotice({ tone: "success", text: `${actionLabel[0].toUpperCase()}${actionLabel.slice(1)} bekor qilindi.` });
+      void recordActivity(historyCustomer.id, transaction.type, `${historyCustomer.name} uchun ${formatMoney(transaction.amount)} ${actionLabel} bekor qilindi.`);
       await loadCustomerHistory({ ...historyCustomer, balance: nextBalance, status: nextStatus });
     } catch {
       setHistoryError("Yozuvni bekor qilib bo'lmadi. Qayta urinib ko'ring.");
