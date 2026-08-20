@@ -10,7 +10,8 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const callbackMessage = searchParams.get("error_code") === "otp_expired" ? "Email havolasi eskirgan yoki avval ishlatilgan. Yangi havola so'rang." : "";
+  const callbackError = searchParams.get("error_code");
+  const callbackMessage = callbackError === "otp_expired" ? "Email havolasi eskirgan yoki avval ishlatilgan. Yangi havola so'rang." : callbackError === "invite_activation_failed" ? "Taklifni faollashtirib bo'lmadi. Do'kon egasidan yangi taklif so'rang." : "";
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

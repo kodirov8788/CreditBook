@@ -27,6 +27,7 @@ import { createClient, hasSupabaseEnv } from "@/lib/supabase/browser";
 import { getCustomerStatus } from "@/lib/customer-status";
 import type { DashboardCustomer, DashboardStats } from "@/lib/types";
 import ActivityFeed from "@/components/activity-feed";
+import ShopSwitcher from "@/components/shop-switcher";
 
 const money = new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 0 });
 const dateFormatter = new Intl.DateTimeFormat("uz-UZ", { month: "short", day: "numeric" });
@@ -708,7 +709,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
           {canManageMembers && <Link className="nav-item" href="/team"><Users size={18} />Jamoa</Link>}
         </nav>
         <div className="sidebar-spacer" />
-        <div className="shop-card"><div className="shop-label">Do'kon</div><div className="shop-name">{shopName}</div><div className="shop-owner">{userEmail ?? "Sinov rejimi"}</div></div>
+        <ShopSwitcher shopName={shopName} userEmail={userEmail} liveMode={liveMode} />
       </aside>
 
       <main className="main-area">
