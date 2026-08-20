@@ -41,3 +41,9 @@ Row Level Security is enabled for every application table. The browser only uses
 ## Deployment
 
 Import the GitHub repository into Vercel, add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, then deploy. Configure the Supabase Auth Site URL and redirect URL to the Vercel domain.
+
+Set `NEXT_PUBLIC_APP_URL` to the canonical HTTPS application origin in Vercel (for example, `https://creditbook.example`). Team invitation links fail closed in production when this value is missing, so they cannot be redirected through an untrusted Host header.
+
+## Supabase Auth email templates
+
+In Supabase Dashboard → Authentication → Email Templates, use Supabase's `{{ .ConfirmationURL }}` variable for confirmation and invitation links. Do not construct the verification URL manually with a token placeholder. After changing a template, send a fresh signup and invitation email and verify that the link contains `token=` and completes at `/auth/callback`.

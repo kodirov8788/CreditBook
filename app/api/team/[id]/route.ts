@@ -4,6 +4,7 @@ import { getAuthenticatedClient, requireShopPermission } from "@/lib/api/auth";
 import { createServiceClient } from "@/lib/admin";
 import { TEAM_ROLES } from "@/lib/team-roles";
 import { recordAudit } from "@/lib/audit";
+import { getTrustedInviteOrigin } from "@/lib/app-url";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -47,7 +48,8 @@ export async function POST(request: Request, context: Context) {
   if (current.status !== "invited") return badRequest("Faqat kutilayotgan taklifni qayta yuborish mumkin.");
   const invitedUser = (await service.auth.admin.getUserById(current.user_id)).data.user;
   if (!invitedUser?.email) return badRequest("Taklif emaili topilmadi.");
-  const origin = new URL(request.url).origin;
+  const origin = getTrustedInviteOrigin(request);
+  if (!origin) return serverError();
   const redirectTo = new URL("/auth/callback", origin);
   redirectTo.searchParams.set("next", "/team");
   redirectTo.searchParams.set("shop_id", access.shopId);
