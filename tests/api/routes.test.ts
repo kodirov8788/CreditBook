@@ -4,7 +4,9 @@ import { getAuthenticatedClient, requireShopPermission } from "@/lib/api/auth";
 import { POST as createCustomer } from "@/app/api/customers/route";
 import { GET as getCustomer, PATCH as updateCustomer } from "@/app/api/customers/[id]/route";
 import { POST as createCredit } from "@/app/api/customers/[id]/credits/route";
+import { POST as cancelCredit } from "@/app/api/customers/[id]/credits/[creditId]/cancel/route";
 import { POST as createPayment } from "@/app/api/customers/[id]/payments/route";
+import { POST as voidPayment } from "@/app/api/customers/[id]/payments/[paymentId]/void/route";
 import { GET as getActivity, POST as createActivity } from "@/app/api/activity/route";
 import { POST as createReminder } from "@/app/api/reminders/route";
 import { GET as getReport } from "@/app/api/reports/route";
@@ -87,6 +89,70 @@ describe("authenticated API contracts", () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({ error: "To'lov qarzdan oshib ketdi." });
     expect(supabase.rpc).toHaveBeenCalledWith("record_payment_atomic", expect.objectContaining({ p_customer_id: "customer-1", p_amount: 500 }));
+  });
+
+  it("covers credit cancellation authentication, permission, errors, and success", async () => {
+    authMock.mockResolvedValue({ supabase: null, user: null });
+    const unauthenticated = await cancelCredit(request({ reason: "Sabab" }), { params: Promise.resolve({ id: "customer-1", creditId: "credit-1" }) });
+    expect(unauthenticated.status).toBe(401);
+
+    const deniedRpc = rpcClient({ data: null, error: null });
+    authMock.mockResolvedValue({ supabase: deniedRpc as never, user: { id: "user-1" } as never });
+    permissionMock.mockResolvedValue({ ok: false, response: NextResponse.json({ error: "Bu amal uchun ruxsat yo'q." }, { status: 403 }) });
+    const denied = await cancelCredit(request({ reason: "Sabab" }), { params: Promise.resolve({ id: "customer-1", creditId: "credit-1" }) });
+    expect(denied.status).toBe(403);
+    expect(deniedRpc.rpc).not.toHaveBeenCalled();
+
+    const invalid = rpcClient({ data: null, error: { code: "22023", message: "Kreditni bekor qilib bo'lmaydi." } });
+    authMock.mockResolvedValue({ supabase: invalid as never, user: { id: "user-1" } as never });
+    permissionMock.mockResolvedValue({ ok: true, shopId: "shop-1" });
+    const invalidResponse = await cancelCredit(request({ reason: "Sabab" }), { params: Promise.resolve({ id: "customer-1", creditId: "credit-1" }) });
+    expect(invalidResponse.status).toBe(400);
+    await expect(invalidResponse.json()).resolves.toEqual({ error: "Kreditni bekor qilib bo'lmaydi." });
+
+    const missing = rpcClient({ data: null, error: { code: "P0002", message: "Kredit topilmadi." } });
+    authMock.mockResolvedValue({ supabase: missing as never, user: { id: "user-1" } as never });
+    const missingResponse = await cancelCredit(request({}), { params: Promise.resolve({ id: "customer-1", creditId: "credit-1" }) });
+    expect(missingResponse.status).toBe(400);
+
+    const success = rpcClient({ data: { id: "credit-1", status: "cancelled" }, error: null });
+    authMock.mockResolvedValue({ supabase: success as never, user: { id: "user-1" } as never });
+    const response = await cancelCredit(request({ reason: "  Sabab  " }), { params: Promise.resolve({ id: "customer-1", creditId: "credit-1" }) });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ credit: { id: "credit-1", status: "cancelled" } });
+    expect(success.rpc).toHaveBeenCalledWith("cancel_credit_atomic", { p_customer_id: "customer-1", p_debt_id: "credit-1", p_reason: "Sabab" });
+  });
+
+  it("covers payment void authentication, permission, errors, and success", async () => {
+    authMock.mockResolvedValue({ supabase: null, user: null });
+    const unauthenticated = await voidPayment(request({ reason: "Sabab" }), { params: Promise.resolve({ id: "customer-1", paymentId: "payment-1" }) });
+    expect(unauthenticated.status).toBe(401);
+
+    const deniedRpc = rpcClient({ data: null, error: null });
+    authMock.mockResolvedValue({ supabase: deniedRpc as never, user: { id: "user-1" } as never });
+    permissionMock.mockResolvedValue({ ok: false, response: NextResponse.json({ error: "Bu amal uchun ruxsat yo'q." }, { status: 403 }) });
+    const denied = await voidPayment(request({ reason: "Sabab" }), { params: Promise.resolve({ id: "customer-1", paymentId: "payment-1" }) });
+    expect(denied.status).toBe(403);
+    expect(deniedRpc.rpc).not.toHaveBeenCalled();
+
+    const invalid = rpcClient({ data: null, error: { code: "22023", message: "To'lovni bekor qilib bo'lmaydi." } });
+    authMock.mockResolvedValue({ supabase: invalid as never, user: { id: "user-1" } as never });
+    permissionMock.mockResolvedValue({ ok: true, shopId: "shop-1" });
+    const invalidResponse = await voidPayment(request({ reason: "Sabab" }), { params: Promise.resolve({ id: "customer-1", paymentId: "payment-1" }) });
+    expect(invalidResponse.status).toBe(400);
+    await expect(invalidResponse.json()).resolves.toEqual({ error: "To'lovni bekor qilib bo'lmaydi." });
+
+    const missing = rpcClient({ data: null, error: { code: "P0002", message: "To'lov topilmadi." } });
+    authMock.mockResolvedValue({ supabase: missing as never, user: { id: "user-1" } as never });
+    const missingResponse = await voidPayment(request({}), { params: Promise.resolve({ id: "customer-1", paymentId: "payment-1" }) });
+    expect(missingResponse.status).toBe(400);
+
+    const success = rpcClient({ data: { id: "payment-1", status: "voided" }, error: null });
+    authMock.mockResolvedValue({ supabase: success as never, user: { id: "user-1" } as never });
+    const response = await voidPayment(request({ reason: "  Sabab  " }), { params: Promise.resolve({ id: "customer-1", paymentId: "payment-1" }) });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ payment: { id: "payment-1", status: "voided" } });
+    expect(success.rpc).toHaveBeenCalledWith("void_payment_atomic", { p_customer_id: "customer-1", p_payment_id: "payment-1", p_reason: "Sabab" });
   });
 
   it("rejects invalid payments before invoking the atomic RPC", async () => {
