@@ -32,7 +32,8 @@ export async function PATCH(request: Request, context: Context) {
   }
   if (!Object.keys(updates).length) return badRequest("O'zgartirish kiriting.");
 
-  const { data, error } = await supabase.from("reminders").update(updates).eq("id", id).select(reminderSelect).single();
-  if (error || !data) return serverError();
+  const { data, error } = await supabase.from("reminders").update(updates).eq("id", id).eq("shop_id", access.shopId).select(reminderSelect).single();
+  if (error?.code === "PGRST116" || !data) return NextResponse.json({ error: "Eslatma topilmadi." }, { status: 404 });
+  if (error) return serverError();
   return NextResponse.json({ reminder: data });
 }
