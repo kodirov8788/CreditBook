@@ -74,7 +74,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { customerId?: string | null; eventType?: string; description?: string } | null;
   const description = body?.description?.trim();
   const eventType = body?.eventType?.trim();
-  if (!description || !eventType) return badRequest("Faoliyat ma'lumotini kiriting.");
+  if (!description || eventType !== "note") return badRequest("Qo'lda faqat izoh yozish mumkin.");
 
   const { data, error } = await supabase
     .from("activity_logs")
