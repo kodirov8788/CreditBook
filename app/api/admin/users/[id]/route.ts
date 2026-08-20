@@ -13,21 +13,21 @@ export async function PATCH(request: Request, context: Context) {
   const body = await request.json().catch(() => null) as { status?: string; role?: string; shopId?: string } | null;
   if (body?.role && body.shopId) {
     if (!["shop_owner", "manager", "cashier", "accountant", "viewer"].includes(body.role)) return NextResponse.json({ error: "Rol noto‘g‘ri." }, { status: 400 });
-    const { data: current } = await admin.client.from("shop_members").select("role").eq("shop_id", body.shopId).eq("user_id", id).maybeSingle();
+    const { data: current } = await admin.client.from("shop_members").select("id, role").eq("shop_id", body.shopId).eq("user_id", id).maybeSingle();
     if (!current) return NextResponse.json({ error: "Membership topilmadi." }, { status: 404 });
     if (current.role === "shop_owner" && body.role !== "shop_owner") {
       const { count } = await admin.client.from("shop_members").select("id", { count: "exact", head: true }).eq("shop_id", body.shopId).eq("role", "shop_owner").eq("status", "active");
       if ((count ?? 0) <= 1) return NextResponse.json({ error: "Oxirgi shop owner rolini pasaytirib bo‘lmaydi." }, { status: 400 });
     }
+    await recordAudit(admin.client, { actorUserId: admin.user.id, shopId: body.shopId, entityType: "membership", entityId: current.id, action: "membership.role_changed", metadata: { userId: id, role: body.role, mutation: "requested" } });
     const { data, error } = await admin.client.from("shop_members").update({ role: body.role }).eq("shop_id", body.shopId).eq("user_id", id).select("id, role").single();
     if (error) return error.code === "23514" ? NextResponse.json({ error: error.message }, { status: 400 }) : serverError();
     if (!data) return serverError();
-    await recordAudit(admin.client, { actorUserId: admin.user.id, shopId: body.shopId, entityType: "membership", entityId: data.id, action: "membership.role_changed", metadata: { userId: id, role: body.role } });
     return NextResponse.json({ membership: data });
   }
   if (body?.status !== "active" && body?.status !== "suspended") return NextResponse.json({ error: "Account holati noto‘g‘ri." }, { status: 400 });
+  await recordAudit(admin.client, { actorUserId: admin.user.id, entityType: "user", entityId: id, action: `user.${body.status === "suspended" ? "suspended" : "reactivated"}`, metadata: { status: body.status, mutation: "requested" } });
   const { data, error } = await admin.client.auth.admin.updateUserById(id, { ban_duration: body.status === "suspended" ? "876000h" : "none" });
   if (error || !data.user) return serverError();
-  await recordAudit(admin.client, { actorUserId: admin.user.id, entityType: "user", entityId: id, action: `user.${body.status === "suspended" ? "suspended" : "reactivated"}`, metadata: { status: body.status } });
   return NextResponse.json({ user: { id: data.user.id, bannedUntil: data.user.banned_until ?? null } });
 }

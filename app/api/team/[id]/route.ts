@@ -29,10 +29,10 @@ export async function PATCH(request: Request, context: Context) {
   }
   const updates = { ...(body?.role ? { role: body.role } : {}), ...(body?.status ? { status: body.status } : {}) };
   if (!Object.keys(updates).length) return badRequest("O‘zgarish kiriting.");
+  await recordAudit(service, { actorUserId: user.id, shopId: access.shopId, entityType: "membership", entityId: id, action: "membership.updated", metadata: { userId: current.user_id, before: { role: current.role, status: current.status }, after: updates, mutation: "requested" } });
   const { data, error } = await service.from("shop_members").update(updates).eq("id", id).eq("shop_id", access.shopId).select("id, role, status").single();
   if (error) return error.code === "23514" ? badRequest(error.message) : serverError();
   if (!data) return serverError();
-  await recordAudit(service, { actorUserId: user.id, shopId: access.shopId, entityType: "membership", entityId: id, action: "membership.updated", metadata: { userId: current.user_id, before: { role: current.role, status: current.status }, after: updates } });
   return NextResponse.json({ member: data });
 }
 

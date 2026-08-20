@@ -3,7 +3,7 @@ import { createClient as createSupabaseClient, type SupabaseClient, type User } 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-type AdminContext = { user: User; client: SupabaseClient };
+type AdminContext = { user: User; client: SupabaseClient; authClient: SupabaseClient };
 
 export function createServiceClient() {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -28,6 +28,7 @@ export async function getPlatformAdmin(): Promise<AdminContext | null> {
   return {
     user,
     client,
+    authClient,
   };
 }
 

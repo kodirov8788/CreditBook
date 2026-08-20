@@ -20,12 +20,26 @@ export async function PATCH(request: Request) {
     return badRequest("Shop nomi 2–80 belgidan iborat bo‘lsin.");
   }
 
+  const service = createServiceClient();
+  if (!service) return serverError();
+
   const { data: current, error: currentError } = await supabase
     .from("shops")
     .select("id, name")
     .eq("id", access.shopId)
     .maybeSingle();
   if (currentError || !current) return serverError();
+
+  if (current.name !== name) {
+    await recordAudit(service, {
+      actorUserId: user.id,
+      shopId: access.shopId,
+      entityType: "shop",
+      entityId: access.shopId,
+      action: "shop.name_updated",
+      metadata: { oldName: current.name, newName: name, mutation: "requested" },
+    });
+  }
 
   const { data: shop, error } = await supabase
     .from("shops")
@@ -34,20 +48,6 @@ export async function PATCH(request: Request) {
     .select("id, name")
     .single();
   if (error || !shop) return serverError();
-
-  if (current.name !== shop.name) {
-    const service = createServiceClient();
-    if (service) {
-      await recordAudit(service, {
-        actorUserId: user.id,
-        shopId: shop.id,
-        entityType: "shop",
-        entityId: shop.id,
-        action: "shop.name_updated",
-        metadata: { oldName: current.name, newName: shop.name },
-      });
-    }
-  }
 
   return NextResponse.json({ shop });
 }

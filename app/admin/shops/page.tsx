@@ -11,12 +11,17 @@ export default async function AdminShopsPage({ searchParams }: { searchParams: S
   const query = params.q?.trim() ?? "";
   const status = params.status === "active" || params.status === "suspended" ? params.status : "all";
   const requestedPage = Math.max(Number.parseInt(params.page ?? "1", 10) || 1, 1);
-  let shopsQuery = client.from("shops").select("id, name, status, owner_user_id, created_at, shop_members(count)", { count: "exact" }).order("created_at", { ascending: false });
-  if (query) shopsQuery = shopsQuery.ilike("name", `%${query.replace(/[,%()]/g, " ")}%`);
-  if (status !== "all") shopsQuery = shopsQuery.eq("status", status);
-  const { data: shops, count } = await shopsQuery.range((requestedPage - 1) * PAGE_SIZE, requestedPage * PAGE_SIZE - 1);
+  const safeQuery = query.replace(/[,%()]/g, " ");
+  let countQuery = client.from("shops").select("id", { count: "exact", head: true });
+  if (safeQuery) countQuery = countQuery.ilike("name", `%${safeQuery}%`);
+  if (status !== "all") countQuery = countQuery.eq("status", status);
+  const { count } = await countQuery;
   const pageCount = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
   const page = Math.min(requestedPage, pageCount);
+  let shopsQuery = client.from("shops").select("id, name, status, owner_user_id, created_at, shop_members(count)").order("created_at", { ascending: false });
+  if (safeQuery) shopsQuery = shopsQuery.ilike("name", `%${safeQuery}%`);
+  if (status !== "all") shopsQuery = shopsQuery.eq("status", status);
+  const { data: shops } = await shopsQuery.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
   const rows = (shops ?? []).map((shop) => ({ id: shop.id, name: shop.name, status: shop.status, createdAt: shop.created_at, memberCount: Array.isArray(shop.shop_members) ? shop.shop_members[0]?.count ?? 0 : 0 }));
   return <div className="admin-page"><header className="admin-page-head"><div><div className="eyebrow">Tenant nazorati</div><h1>Do‘konlar</h1><p>Shop holati va a’zolar sonini kuzating.</p></div></header><AdminShopsTable shops={rows} totalCount={count ?? 0} page={page} pageCount={pageCount} query={query} status={status} /></div>;
 }
