@@ -5,8 +5,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient, hasSupabaseEnv } from "@/lib/supabase/browser";
 
-const productionAppUrl = "https://g-p-6a7df7e8f1dc8191816ac81589324a2.vercel.app";
-
 function LoginForm() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -20,7 +18,7 @@ function LoginForm() {
     const supabase = createClient();
     if (!supabase) { setMessage("Kirish uchun Supabase sozlamasi kerak."); return; }
     setLoading(true);
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || productionAppUrl).replace(/\/$/, "");
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || window.location.origin).replace(/\/$/, "");
     const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${appUrl}/auth/callback` } });
     setMessage(error ? "Kirish havolasi yuborilmadi. Qayta urinib ko'ring." : "Kirish havolasi emailingizga yuborildi.");
     setLoading(false);

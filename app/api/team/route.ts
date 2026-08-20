@@ -4,6 +4,7 @@ import { getAuthenticatedClient, requireShopPermission } from "@/lib/api/auth";
 import { createServiceClient } from "@/lib/admin";
 import { TEAM_ROLES } from "@/lib/team-roles";
 import { recordAudit } from "@/lib/audit";
+import { getTrustedInviteOrigin } from "@/lib/app-url";
 
 const inviteRoles = TEAM_ROLES.filter((role) => role !== "shop_owner");
 
@@ -38,7 +39,8 @@ export async function POST(request: Request) {
   if (!inviteRoles.includes(role as (typeof inviteRoles)[number])) return badRequest("Taklif roli noto‘g‘ri.");
   const service = createServiceClient();
   if (!service) return serverError();
-  const origin = new URL(request.url).origin;
+  const origin = getTrustedInviteOrigin(request);
+  if (!origin) return serverError();
   const redirectTo = new URL("/auth/callback", origin);
   redirectTo.searchParams.set("next", "/team");
   redirectTo.searchParams.set("shop_id", access.shopId);

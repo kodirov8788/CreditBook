@@ -11,6 +11,7 @@ import { GET as getActivity, POST as createActivity } from "@/app/api/activity/r
 import { POST as createReminder } from "@/app/api/reminders/route";
 import { GET as getReport } from "@/app/api/reports/route";
 import { POST as createExpense } from "@/app/api/expenses/route";
+import { PATCH as updateExpense } from "@/app/api/expenses/[id]/route";
 import { GET as getTeam, POST as inviteTeam } from "@/app/api/team/route";
 import { PATCH as updateTeamMember } from "@/app/api/team/[id]/route";
 import { PATCH as updateShop } from "@/app/api/shop/route";
@@ -78,6 +79,40 @@ describe("authenticated API contracts", () => {
     const invalid = await updateCustomer(request({ name: "A" }), { params: Promise.resolve({ id: "customer-1" }) });
     expect(invalid.status).toBe(400);
     expect(from).not.toHaveBeenCalled();
+  });
+
+  it("scopes per-record customer and expense updates to the current shop", async () => {
+    const single = vi.fn().mockResolvedValue({ data: { id: "record-1" }, error: null });
+    const customerQuery = {
+      eq: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnValue({ single }),
+    };
+    const customerSupabase = {
+      from: vi.fn().mockReturnValue({ update: vi.fn().mockReturnValue(customerQuery) }),
+    };
+    authMock.mockResolvedValue({ supabase: customerSupabase as never, user: { id: "user-1" } as never });
+
+    const customerResponse = await updateCustomer(request({ name: "Yangi ism" }), { params: Promise.resolve({ id: "customer-1" }) });
+
+    expect(customerResponse.status).toBe(200);
+    expect(customerQuery.eq).toHaveBeenCalledWith("id", "customer-1");
+    expect(customerQuery.eq).toHaveBeenCalledWith("shop_id", "shop-1");
+
+    const expenseQuery = {
+      eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnValue({ single }),
+    };
+    const expenseSupabase = {
+      from: vi.fn().mockReturnValue({ update: vi.fn().mockReturnValue(expenseQuery) }),
+    };
+    authMock.mockResolvedValue({ supabase: expenseSupabase as never, user: { id: "user-1" } as never });
+
+    const expenseResponse = await updateExpense(request({ category: "Ijara", amount: 100 }), { params: Promise.resolve({ id: "expense-1" }) });
+
+    expect(expenseResponse.status).toBe(200);
+    expect(expenseQuery.eq).toHaveBeenCalledWith("id", "expense-1");
+    expect(expenseQuery.eq).toHaveBeenCalledWith("shop_id", "shop-1");
   });
 
   it("maps atomic payment overpayment errors to a safe client error", async () => {

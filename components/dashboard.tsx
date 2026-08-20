@@ -37,8 +37,6 @@ type EntryType = "credit" | "payment";
 type HistoryFilter = "all" | "credit" | "payment";
 type MoreView = "reminders" | "reports" | null;
 type DashboardView = "dashboard" | "customers" | "activity" | "reminders" | "reports";
-type HistoryCredit = { id: string; title: string | null; principal: number; due_date: string | null; status: string; created_at: string };
-type HistoryPayment = { id: string; debt_id: string; amount: number; paid_at: string | null; note: string | null; created_at: string; voided_at: string | null; void_reason: string | null };
 type HistoryTransaction = { id: string; type: "credit" | "payment"; amount: number; description: string; occurredAt: string; dueDate: string | null; status: string | null; balanceAfter: number; voided: boolean };
 type ReminderItem = { id: string; customer_id: string; channel: string; scheduled_for: string | null; sent_at: string | null; status: string; error_reason?: string | null; message: string | null; customers?: { name?: string; phone?: string | null } | null };
 type ExpenseItem = { id: string; category: string; amount: number; spent_at: string; vendor: string | null; note: string | null; payment_method: string; voided_at: string | null };
@@ -68,19 +66,6 @@ function formatHistoryDate(value: string) {
 function formatHistoryGroup(value: string) {
   const date = new Date(value.includes("T") ? value : `${value}T12:00:00`);
   return new Intl.DateTimeFormat("uz-UZ", { day: "numeric", month: "long", year: "numeric" }).format(date);
-}
-
-function normalizeHistory(credits: HistoryCredit[], payments: HistoryPayment[]) {
-  const raw: HistoryTransaction[] = [
-    ...credits.map((credit) => ({ id: credit.id, type: "credit" as const, amount: Number(credit.principal), description: credit.title?.trim() || "Qarz", occurredAt: credit.created_at, dueDate: credit.due_date, status: credit.status, balanceAfter: 0, voided: credit.status === "cancelled" })),
-    ...payments.map((payment) => ({ id: payment.id, type: "payment" as const, amount: Number(payment.amount), description: payment.note?.trim() || "To'lov", occurredAt: payment.paid_at ?? payment.created_at, dueDate: null, status: payment.voided_at ? "voided" : null, balanceAfter: 0, voided: Boolean(payment.voided_at) })),
-  ].filter((transaction) => Number.isFinite(transaction.amount) && transaction.amount > 0).sort((left, right) => new Date(left.occurredAt).getTime() - new Date(right.occurredAt).getTime());
-
-  let balance = 0;
-  return raw.map((transaction) => {
-    if (!transaction.voided) balance = Math.max(balance + (transaction.type === "credit" ? transaction.amount : -transaction.amount), 0);
-    return { ...transaction, balanceAfter: balance };
-  }).reverse();
 }
 
 function formatToday() {
@@ -232,16 +217,13 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
       return;
     }
 
-    const [{ data: credits, error: creditError }, { data: payments, error: paymentError }] = await Promise.all([
-      supabase.from("debts").select("id, title, principal, due_date, status, created_at").eq("customer_id", customer.id).order("created_at", { ascending: false }),
-      supabase.from("payments").select("id, debt_id, amount, paid_at, note, created_at, voided_at, void_reason").eq("customer_id", customer.id).order("paid_at", { ascending: false }),
-    ]);
-
-    if (creditError || paymentError) {
+    const response = await fetch(`/api/customers/${customer.id}/history`, { cache: "no-store" });
+    const payload = await response.json().catch(() => null) as { transactions?: HistoryTransaction[] } | null;
+    if (!response.ok || !Array.isArray(payload?.transactions)) {
       setHistoryTransactions([]);
       setHistoryError("Tarix olinmadi. Qayta urinib ko'ring.");
     } else {
-      const transactions = normalizeHistory((credits ?? []) as HistoryCredit[], (payments ?? []) as HistoryPayment[]);
+      const transactions = payload.transactions;
       historyCache.set(customer.id, { transactions, savedAt: Date.now() });
       setHistoryTransactions(transactions);
     }

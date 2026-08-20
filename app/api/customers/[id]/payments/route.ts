@@ -10,7 +10,7 @@ export async function GET(request: Request, context: Context) {
   if (!supabase || !user) return unauthorized();
   const access = await requireShopPermission(supabase, user, "payment.read");
   if (!access.ok) return access.response;
-  const { data, error } = await supabase.from("payments").select("id, debt_id, amount, paid_at, note, created_at, voided_at, void_reason").eq("customer_id", id).order("paid_at", { ascending: false });
+  const { data, error } = await supabase.from("payments").select("id, debt_id, amount, paid_at, note, created_at, voided_at, void_reason").eq("customer_id", id).eq("shop_id", access.shopId).order("paid_at", { ascending: false });
   if (error) return serverError();
   return NextResponse.json({ payments: data });
 }
