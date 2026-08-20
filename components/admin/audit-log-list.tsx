@@ -1,8 +1,9 @@
 "use client";
 
 import { History, Search, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { teamRoleLabel } from "@/lib/team-roles";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 export type AuditRow = {
   id: string;
@@ -36,14 +37,14 @@ function auditDetail(row: AuditRow) {
   return row.shopName ? `Shop: ${row.shopName}` : "Platform nazorati";
 }
 
-export default function AuditLogList({ rows }: { rows: AuditRow[] }) {
-  const [query, setQuery] = useState("");
-  const [action, setAction] = useState("all");
-  const actions = useMemo(() => [...new Set(rows.map((row) => row.action))], [rows]);
-  const filtered = useMemo(() => rows.filter((row) => {
-    const haystack = `${row.action} ${row.actorEmail} ${row.shopName ?? ""}`.toLowerCase();
-    return (action === "all" || row.action === action) && (!query.trim() || haystack.includes(query.trim().toLowerCase()));
-  }), [action, query, rows]);
-  if (!rows.length) return <div className="admin-empty">Hali audit yozuvlari yo‘q.</div>;
-  return <><div className="admin-filters"><label className="admin-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Actor yoki amal bo‘yicha qidirish" aria-label="Audit qidirish" /></label><select value={action} onChange={(event) => setAction(event.target.value)} aria-label="Audit amal filtri"><option value="all">Barcha amallar</option>{actions.map((item) => <option value={item} key={item}>{actionLabels[item] ?? item}</option>)}</select></div><div className="audit-list">{filtered.map((row) => <article className="audit-row" key={row.id}><span className="audit-icon"><History size={17} /></span><div className="audit-copy"><strong>{actionLabels[row.action] ?? row.action}</strong><small>{row.actorEmail} · {auditDetail(row)}</small></div><span className="audit-time">{new Date(row.createdAt).toLocaleString("uz-UZ", { dateStyle: "medium", timeStyle: "short" })}</span><ShieldCheck className="audit-secure" size={15} /></article>)}{!filtered.length && <div className="admin-empty">Filter bo‘yicha audit topilmadi.</div>}</div></>;
+export default function AuditLogList({ rows, totalCount, page, pageCount, query, action }: { rows: AuditRow[]; totalCount: number; page: number; pageCount: number; query: string; action: string }) {
+  const actions = useMemo(() => [...new Set([...rows.map((row) => row.action), ...(action ? [action] : [])])], [action, rows]);
+  function pageHref(nextPage: number) {
+    const params = new URLSearchParams({ page: String(nextPage) });
+    if (query) params.set("q", query);
+    if (action) params.set("action", action);
+    return `/admin/audit?${params.toString()}`;
+  }
+
+  return <><form className="admin-filters" action="/admin/audit" method="get"><label className="admin-search"><Search size={16} /><input defaultValue={query} name="q" placeholder="Amal yoki tur bo‘yicha qidirish" aria-label="Audit qidirish" /></label><select defaultValue={action || "all"} name="action" aria-label="Audit amal filtri"><option value="all">Barcha amallar</option>{actions.map((item) => <option value={item} key={item}>{actionLabels[item] ?? item}</option>)}</select><button className="text-button" type="submit">Qidirish</button></form><div className="audit-list">{rows.length ? rows.map((row) => <article className="audit-row" key={row.id}><span className="audit-icon"><History size={17} /></span><div className="audit-copy"><strong>{actionLabels[row.action] ?? row.action}</strong><small>{row.actorEmail} · {auditDetail(row)}</small></div><span className="audit-time">{new Date(row.createdAt).toLocaleString("uz-UZ", { dateStyle: "medium", timeStyle: "short" })}</span><ShieldCheck className="audit-secure" size={15} /></article>) : <div className="admin-empty">{totalCount ? "Filter bo‘yicha audit topilmadi." : "Hali audit yozuvlari yo‘q."}</div>}</div>{pageCount > 1 && <div className="admin-pagination"><Link className="text-button" aria-disabled={page === 1} href={page === 1 ? "#" : pageHref(page - 1)}>Oldingi</Link><span>{page} / {pageCount} · {totalCount} ta</span><Link className="text-button" aria-disabled={page === pageCount} href={page === pageCount ? "#" : pageHref(page + 1)}>Keyingi</Link></div>}</>;
 }
