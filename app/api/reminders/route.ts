@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 
   const status = new URL(request.url).searchParams.get("status");
   let query = supabase.from("reminders").select(reminderSelect).order("scheduled_for", { ascending: true, nullsFirst: false });
-  if (status === "pending" || status === "sent" || status === "cancelled") query = query.eq("status", status);
+  if (status === "pending" || status === "sent" || status === "cancelled" || status === "failed") query = query.eq("status", status);
   const { data, error } = await query;
   if (error) return serverError();
   return NextResponse.json({ reminders: data });
