@@ -385,6 +385,6 @@ describe("authenticated API contracts", () => {
     const response = await updateTeamMember(request({ role: "manager" }), { params: Promise.resolve({ id: "membership-1" }) });
 
     expect(response.status).toBe(400);
-    expect(auditMock).not.toHaveBeenCalled();
+    expect(auditMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ action: "membership.updated", metadata: expect.objectContaining({ mutation: "requested" }) }));
   });
 });

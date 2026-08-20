@@ -1,8 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export default function AdminUserActions({ userId, banned }: { userId: string; banned: boolean }) {
+  const router = useRouter();
   const [currentBanned, setCurrentBanned] = useState(banned);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -14,6 +16,7 @@ export default function AdminUserActions({ userId, banned }: { userId: string; b
     if (response.ok) {
       setCurrentBanned((current) => !current);
       setMessage(currentBanned ? "Account qayta faollashtirildi." : "Account bloklandi.");
+      router.refresh();
     } else {
       setMessage("Amal bajarilmadi.");
     }

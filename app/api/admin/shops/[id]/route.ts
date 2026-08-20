@@ -11,8 +11,8 @@ export async function PATCH(request: Request, context: Context) {
   const { id } = await context.params;
   const body = await request.json().catch(() => null) as { status?: string } | null;
   if (body?.status !== "active" && body?.status !== "suspended") return NextResponse.json({ error: "Shop holati noto‘g‘ri." }, { status: 400 });
+  await recordAudit(admin.client, { actorUserId: admin.user.id, shopId: id, entityType: "shop", entityId: id, action: `shop.${body.status === "suspended" ? "suspended" : "reactivated"}`, metadata: { status: body.status, mutation: "requested" } });
   const { data, error } = await admin.client.from("shops").update({ status: body.status }).eq("id", id).select("id, status").single();
   if (error || !data) return error?.code === "PGRST116" ? forbidden() : serverError();
-  await recordAudit(admin.client, { actorUserId: admin.user.id, shopId: id, entityType: "shop", entityId: id, action: `shop.${body.status === "suspended" ? "suspended" : "reactivated"}`, metadata: { status: body.status } });
   return NextResponse.json({ shop: data });
 }
