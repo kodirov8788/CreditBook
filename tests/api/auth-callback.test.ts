@@ -36,4 +36,14 @@ describe("auth callback", () => {
     await GET(request("?code=expired&shop_id=11111111-1111-4111-8111-111111111111"));
     expect(rpc).not.toHaveBeenCalled();
   });
+
+  it("does not continue to the team page when invite activation fails", async () => {
+    const rpc = vi.fn().mockResolvedValue({ error: { code: "P0002" } });
+    const exchangeCodeForSession = vi.fn().mockResolvedValue({ error: null });
+    clientMock.mockResolvedValue({ auth: { exchangeCodeForSession }, rpc } as never);
+
+    const response = await GET(request("?code=one&next=%2Fteam&shop_id=11111111-1111-4111-8111-111111111111"));
+
+    expect(response.headers.get("location")).toBe("https://creditbook.example/login?error_code=invite_activation_failed");
+  });
 });

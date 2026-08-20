@@ -456,7 +456,9 @@ select { width: 100%; min-height: 48px; border: 1px solid var(--line); border-ra
   .shop-card { border-top: 1px solid rgba(255,255,255,.16); padding: 18px 10px 0; }
   .shop-label { color: #9bc4aa; font-size: 11px; text-transform: uppercase; letter-spacing: .09em; }
   .shop-name { margin-top: 8px; font-weight: 700; }
+  .shop-select { width: 100%; margin-top: 7px; border: 0; border-radius: 7px; padding: 7px 8px; color: #153c2a; background: #eef8f0; font: inherit; font-size: 13px; font-weight: 700; }
   .shop-owner { color: #a8cbb5; font-size: 12px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .shop-switch-error { color: #ffd0d0; font-size: 11px; margin-top: 6px; }
   .mobile-brand, .mobile-nav, .mobile-notice { display: none; }
   .topbar { position: static; min-height: 82px; padding: 0 42px; }
   .topbar-copy { display: block; }

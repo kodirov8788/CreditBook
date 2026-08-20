@@ -15,7 +15,12 @@ export async function GET(request: Request) {
   if (code && supabase) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error && invitedShopId && /^[0-9a-f-]{36}$/i.test(invitedShopId)) {
-      await supabase.rpc("activate_invited_memberships", { p_shop_id: invitedShopId });
+      const { error: activationError } = await supabase.rpc("activate_invited_memberships", { p_shop_id: invitedShopId });
+      if (activationError) {
+        const activationFailure = new URL("/login", appOrigin);
+        activationFailure.searchParams.set("error_code", "invite_activation_failed");
+        return NextResponse.redirect(activationFailure);
+      }
     }
   }
   return NextResponse.redirect(next);

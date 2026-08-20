@@ -359,4 +359,19 @@ describe("authenticated API contracts", () => {
     expect(response.status).toBe(400);
     expect(auditMock).not.toHaveBeenCalled();
   });
+
+  it("maps a database last-owner invariant failure to a client error", async () => {
+    const currentQuery = { eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: { id: "membership-1", user_id: "owner-1", role: "shop_owner", status: "active" }, error: null }) };
+    const countQuery = { eq: vi.fn().mockReturnThis(), then: (resolve: (value: unknown) => unknown) => resolve({ count: 2, error: null }) };
+    const updateQuery = { eq: vi.fn().mockReturnThis(), select: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: null, error: { code: "23514", message: "Oxirgi shop owner''ni o'zgartirib bo'lmaydi." } }) }) };
+    const service = { from: vi.fn().mockReturnValueOnce({ select: vi.fn().mockReturnValue(currentQuery) }).mockReturnValueOnce({ select: vi.fn().mockReturnValue(countQuery) }).mockReturnValueOnce({ update: vi.fn().mockReturnValue(updateQuery) }) };
+    serviceClientMock.mockReturnValue(service as never);
+    authMock.mockResolvedValue({ supabase: { rpc: vi.fn() } as never, user: { id: "manager-1" } as never });
+    permissionMock.mockResolvedValue({ ok: true, shopId: "shop-1" });
+
+    const response = await updateTeamMember(request({ role: "manager" }), { params: Promise.resolve({ id: "membership-1" }) });
+
+    expect(response.status).toBe(400);
+    expect(auditMock).not.toHaveBeenCalled();
+  });
 });
