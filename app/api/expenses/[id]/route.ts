@@ -13,7 +13,7 @@ export async function PATCH(request: Request, context: Context) {
   const access = await requireShopPermission(supabase, user, body?.void ? "expense.void" : "expense.update");
   if (!access.ok) return access.response;
   if (body?.void) {
-    const { data, error } = await supabase.from("expenses").update({ voided_at: new Date().toISOString(), void_reason: body.reason?.trim() || "Foydalanuvchi tuzatishi" }).eq("id", id).is("voided_at", null).select(expenseSelect).single();
+    const { data, error } = await supabase.from("expenses").update({ voided_at: new Date().toISOString(), void_reason: body.reason?.trim() || "Foydalanuvchi tuzatishi" }).eq("id", id).eq("shop_id", access.shopId).is("voided_at", null).select(expenseSelect).single();
     if (error || !data) return serverError();
     return NextResponse.json({ expense: data });
   }
@@ -32,7 +32,7 @@ export async function PATCH(request: Request, context: Context) {
   if (body?.note !== undefined) updates.note = body.note?.trim() || null;
   if (body?.paymentMethod !== undefined) updates.payment_method = body.paymentMethod;
   if (!Object.keys(updates).length) return badRequest("O'zgartirish kiriting.");
-  const { data, error } = await supabase.from("expenses").update(updates).eq("id", id).is("voided_at", null).select(expenseSelect).single();
+  const { data, error } = await supabase.from("expenses").update(updates).eq("id", id).eq("shop_id", access.shopId).is("voided_at", null).select(expenseSelect).single();
   if (error || !data) return serverError();
   return NextResponse.json({ expense: data });
 }

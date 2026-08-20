@@ -26,7 +26,7 @@ export async function PATCH(request: Request, context: Context) {
   const name = body?.name?.trim();
   if (!name || name.length < 2) return badRequest("Mijoz ismini kiriting.");
 
-  const { data, error } = await supabase.from("customers").update({ name, phone: body?.phone?.trim() || null, address: body?.address?.trim() || null, notes: body?.notes?.trim() || null }).eq("id", id).select("id, name, phone, address, notes, updated_at").single();
+  const { data, error } = await supabase.from("customers").update({ name, phone: body?.phone?.trim() || null, address: body?.address?.trim() || null, notes: body?.notes?.trim() || null }).eq("id", id).eq("shop_id", access.shopId).select("id, name, phone, address, notes, updated_at").single();
   if (error || !data) return NextResponse.json({ error: "Mijoz topilmadi." }, { status: 404 });
   return NextResponse.json({ customer: data });
 }
