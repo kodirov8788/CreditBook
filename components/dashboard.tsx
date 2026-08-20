@@ -294,7 +294,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
         collectedThisMonth: transaction.type === "payment" && transaction.occurredAt.slice(0, 7) === new Date().toISOString().slice(0, 7) ? Math.max(current.collectedThisMonth - transaction.amount, 0) : current.collectedThisMonth,
       }));
       setNotice({ tone: "success", text: `${actionLabel[0].toUpperCase()}${actionLabel.slice(1)} bekor qilindi.` });
-      void recordActivity(historyCustomer.id, transaction.type, `${historyCustomer.name} uchun ${formatMoney(transaction.amount)} ${actionLabel} bekor qilindi.`);
+      void refreshActivities();
       await loadCustomerHistory({ ...historyCustomer, balance: nextBalance, status: nextStatus });
     } catch {
       setHistoryError("Yozuvni bekor qilib bo'lmadi. Qayta urinib ko'ring.");
@@ -331,6 +331,13 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     setReminderLoading(false);
   }
 
+  async function refreshActivities() {
+    if (!liveMode) return;
+    const response = await fetch("/api/activity?page=1&pageSize=10", { cache: "no-store" });
+    const payload = await response.json().catch(() => null) as { activities?: ActivityItem[] } | null;
+    if (response.ok && payload?.activities) setActivities(payload.activities);
+  }
+
   function openMoreView(view: MoreView) {
     setMoreOpen(false);
     setMoreView(view);
@@ -358,8 +365,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
       setReminderForm({ customerId: "", scheduledFor: nextHourInputValue(), message: "", channel: "manual" });
       setEditingReminderId(null);
       setNotice({ tone: "success", text: isEditing ? "Eslatma yangilandi." : "Eslatma saqlandi." });
-      const customer = customers.find((item) => item.id === reminderForm.customerId);
-      void recordActivity(reminderForm.customerId, "reminder", `${customer?.name || "Mijoz"} uchun eslatma ${isEditing ? "yangilandi" : "saqlandi"}.`);
+      void refreshActivities();
       await loadReminders();
     } finally {
       setReminderSaving(false);
@@ -376,7 +382,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
       }
       setReminders((current) => current.map((reminder) => reminder.id === id ? { ...reminder, status: "cancelled" } : reminder));
       setNotice({ tone: "success", text: "Eslatma bekor qilindi." });
-      void recordActivity(null, "reminder", "Eslatma bekor qilindi.");
+      void refreshActivities();
     } finally {
       setReminderActionId(null);
     }
@@ -398,7 +404,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
       }
       setReminders((current) => current.map((item) => item.id === reminder.id ? payload.reminder! : item));
       setNotice({ tone: "success", text: "Eslatma yuborildi deb qayd qilindi." });
-      void recordActivity(reminder.customer_id, "reminder", `${reminder.customers?.name || "Mijoz"}ga eslatma yuborildi.`);
+      void refreshActivities();
     } finally {
       setReminderActionId(null);
     }
@@ -435,7 +441,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
       }
       setExpenseForm({ category: "", amount: "", spentAt: localDateInputValue(), vendor: "", note: "" });
       setNotice({ tone: "success", text: "Xarajat saqlandi." });
-      void recordActivity(null, "expense", `${expenseForm.category} uchun ${formatMoney(Number(expenseForm.amount))} xarajat yozildi.`);
+      void refreshActivities();
       await loadReport(reportRange);
     } finally {
       setExpenseSaving(false);
@@ -451,24 +457,11 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
         return;
       }
       setNotice({ tone: "success", text: "Xarajat bekor qilindi." });
-      void recordActivity(null, "expense", "Xarajat bekor qilindi.");
+      void refreshActivities();
       await loadReport(reportRange);
     } finally {
       setExpenseSaving(false);
     }
-  }
-
-  async function recordActivity(customerId: string | null, eventType: string, description: string) {
-    const localActivity: ActivityItem = { id: `local-${eventType}-${customerId ?? "general"}-${description}`, customer_id: customerId, event_type: eventType, description, created_at: new Date().toISOString() };
-    if (liveMode) {
-      const response = await fetch("/api/activity", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customerId, eventType, description }) });
-      const payload = await response.json().catch(() => null) as { activity?: ActivityItem } | null;
-      if (response.ok && payload?.activity) {
-        setActivities((current) => [payload.activity as ActivityItem, ...current].slice(0, 10));
-        return;
-      }
-    }
-    setActivities((current) => [localActivity, ...current].slice(0, 10));
   }
 
   function closeAddCustomer() {
@@ -516,8 +509,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
 
       setCustomers((current) => [newCustomer, ...current]);
       setStats((current) => ({ ...current, activeCustomers: current.activeCustomers + (newCustomer.balance > 0 ? 1 : 0), totalOutstanding: current.totalOutstanding + newCustomer.balance, overdueAmount: current.overdueAmount + (newCustomer.status === "overdue" ? newCustomer.balance : 0) }));
-      void recordActivity(newCustomer.id, "customer", `${newCustomer.name} qo'shildi.`);
-      if (newCustomer.balance > 0) void recordActivity(newCustomer.id, "credit", `${newCustomer.name}ga ${formatMoney(newCustomer.balance)} qarz yozildi.`);
+      void refreshActivities();
       setNotice({ tone: "success", text: "Mijoz saqlandi." });
       closeAddCustomer();
     } finally {
@@ -590,7 +582,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
           }
         }
         setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, name: quickForm.name.trim(), phone: quickForm.phone.trim() || "Telefon yo'q" } : item));
-        void recordActivity(customer.id, "customer", `${quickForm.name.trim()} ma'lumotlari yangilandi.`);
+        void refreshActivities();
         setNotice({ tone: "success", text: "Mijoz yangilandi." });
       }
 
@@ -605,7 +597,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
           return;
         }
         applyCredit(customer, amount, quickForm.dueDate || null);
-        void recordActivity(customer.id, "credit", `${customer.name}ga ${formatMoney(amount)} qarz yozildi.`);
+        void refreshActivities();
         setNotice({ tone: "success", text: `${customer.name}ga ${formatMoney(amount)} qarz yozildi.` });
       }
 
@@ -620,7 +612,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
           return;
         }
         applyPayment(customer, amount);
-        void recordActivity(customer.id, "payment", `${customer.name}dan ${formatMoney(amount)} to'lov olindi.`);
+        void refreshActivities();
         setNotice({ tone: "success", text: `${formatMoney(amount)} to'lov saqlandi.` });
       }
 
@@ -677,7 +669,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
           return;
         }
         applyCredit(customer, amount, entryForm.dueDate || null);
-        void recordActivity(customer.id, "credit", `${customer.name}ga ${formatMoney(amount)} qarz yozildi.`);
+        void refreshActivities();
         setNotice({ tone: "success", text: `${customer.name}ga ${formatMoney(amount)} qarz yozildi.` });
       } else {
         const paymentError = await recordPayment(customer, amount, entryForm.note);
@@ -686,7 +678,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
           return;
         }
         applyPayment(customer, amount);
-        void recordActivity(customer.id, "payment", `${customer.name}dan ${formatMoney(amount)} to'lov olindi.`);
+        void refreshActivities();
         setNotice({ tone: "success", text: `${formatMoney(amount)} to'lov saqlandi.` });
       }
       closeEntry();

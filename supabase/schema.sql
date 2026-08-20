@@ -112,7 +112,7 @@ create table if not exists public.reminders (
 
 create table if not exists public.activity_logs (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  user_id uuid references auth.users(id) on delete set null default auth.uid(),
   shop_id uuid references public.shops(id) on delete cascade,
   customer_id uuid references public.customers(id) on delete set null,
   event_type text not null,

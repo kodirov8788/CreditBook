@@ -174,11 +174,11 @@ describe("authenticated API contracts", () => {
     authMock.mockResolvedValue({ supabase: supabase as never, user: { id: "user-1" } as never });
 
     const invalidResponse = await createActivity(request({ customerId: "customer-1" }));
-    const validResponse = await createActivity(request({ customerId: "customer-1", eventType: "payment", description: "To'lov yozildi" }));
+    const validResponse = await createActivity(request({ customerId: "customer-1", eventType: "note", description: "To'lov haqida izoh" }));
 
     expect(invalidResponse.status).toBe(400);
     expect(validResponse.status).toBe(201);
-    expect(insert).toHaveBeenCalledWith({ customer_id: "customer-1", event_type: "payment", description: "To'lov yozildi" });
+    expect(insert).toHaveBeenCalledWith({ customer_id: "customer-1", event_type: "note", description: "To'lov haqida izoh" });
   });
 
   it("protects activity history with authentication", async () => {
