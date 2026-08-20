@@ -16,9 +16,9 @@ export async function GET(request: Request) {
   const from = params.get("from");
   const to = params.get("to");
   const [{ data: debts, error: debtsError }, { data: payments, error: paymentsError }, { data: expenses, error: expensesError }] = await Promise.all([
-    supabase.from("debts").select("id, customer_id, principal, due_date, status, created_at"),
-    supabase.from("payments").select("debt_id, amount, paid_at, voided_at"),
-    supabase.from("expenses").select("id, category, amount, spent_at, vendor, note, payment_method, voided_at, void_reason, created_at").order("spent_at", { ascending: false }),
+    supabase.from("debts").select("id, customer_id, principal, due_date, status, created_at").eq("shop_id", access.shopId),
+    supabase.from("payments").select("debt_id, amount, paid_at, voided_at").eq("shop_id", access.shopId),
+    supabase.from("expenses").select("id, category, amount, spent_at, vendor, note, payment_method, voided_at, void_reason, created_at").eq("shop_id", access.shopId).order("spent_at", { ascending: false }),
   ]);
   if (debtsError || paymentsError || expensesError) return serverError();
 

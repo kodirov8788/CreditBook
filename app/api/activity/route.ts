@@ -36,6 +36,7 @@ export async function GET(request: Request) {
   let builder = supabase
     .from("activity_logs")
     .select("id, customer_id, event_type, description, created_at, customers(name, phone)", { count: "exact" })
+    .eq("shop_id", access.shopId)
     .order("created_at", { ascending: false });
   if (eventType && eventType !== "all") builder = builder.eq("event_type", eventType);
   if (customerId && customerId !== "all") builder = builder.eq("customer_id", customerId);

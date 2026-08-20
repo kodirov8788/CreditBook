@@ -11,7 +11,7 @@ export async function GET(request: Request, context: Context) {
   const access = await requireShopPermission(supabase, user, "customer.read");
   if (!access.ok) return access.response;
 
-  const { data, error } = await supabase.from("customers").select("id, name, phone, address, notes, created_at, updated_at, debts(id, title, principal, due_date, status, created_at, payments(id, amount, paid_at, note, voided_at, void_reason))").eq("id", id).single();
+  const { data, error } = await supabase.from("customers").select("id, name, phone, address, notes, created_at, updated_at, debts(id, title, principal, due_date, status, created_at, payments(id, amount, paid_at, note, voided_at, void_reason))").eq("id", id).eq("shop_id", access.shopId).single();
   if (error) return NextResponse.json({ error: "Mijoz topilmadi." }, { status: 404 });
   return NextResponse.json({ customer: data });
 }

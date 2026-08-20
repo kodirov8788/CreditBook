@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   if (!supabase || !user) return unauthorized();
   const access = await requireShopPermission(supabase, user, "customer.read");
   if (!access.ok) return access.response;
-  const { data, error } = await supabase.from("customers").select("id, name, phone, debts(principal, due_date, status, payments(amount, paid_at, voided_at))").order("created_at", { ascending: false });
+  const { data, error } = await supabase.from("customers").select("id, name, phone, debts(principal, due_date, status, payments(amount, paid_at, voided_at))").eq("shop_id", access.shopId).order("created_at", { ascending: false });
   if (error) return serverError();
 
   const customers = data ?? [];

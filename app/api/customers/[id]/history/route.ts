@@ -13,8 +13,8 @@ export async function GET(request: Request, context: Context) {
   if (!access.ok) return access.response;
 
   const [{ data: credits, error: creditError }, { data: payments, error: paymentError }] = await Promise.all([
-    supabase.from("debts").select("id, title, principal, due_date, status, created_at").eq("customer_id", id).order("created_at", { ascending: false }),
-    supabase.from("payments").select("id, debt_id, amount, paid_at, note, created_at, voided_at, void_reason").eq("customer_id", id).order("paid_at", { ascending: false }),
+    supabase.from("debts").select("id, title, principal, due_date, status, created_at").eq("customer_id", id).eq("shop_id", access.shopId).order("created_at", { ascending: false }),
+    supabase.from("payments").select("id, debt_id, amount, paid_at, note, created_at, voided_at, void_reason").eq("customer_id", id).eq("shop_id", access.shopId).order("paid_at", { ascending: false }),
   ]);
   if (creditError || paymentError) return serverError();
 

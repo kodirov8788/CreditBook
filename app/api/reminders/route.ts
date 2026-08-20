@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   if (!access.ok) return access.response;
 
   const status = new URL(request.url).searchParams.get("status");
-  let query = supabase.from("reminders").select(reminderSelect).order("scheduled_for", { ascending: true, nullsFirst: false });
+  let query = supabase.from("reminders").select(reminderSelect).eq("shop_id", access.shopId).order("scheduled_for", { ascending: true, nullsFirst: false });
   if (status === "pending" || status === "sent" || status === "cancelled" || status === "failed") query = query.eq("status", status);
   const { data, error } = await query;
   if (error) return serverError();

@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   const access = await requireShopPermission(supabase, user, "expense.read");
   if (!access.ok) return access.response;
   const params = new URL(request.url).searchParams;
-  let query = supabase.from("expenses").select(expenseSelect).order("spent_at", { ascending: false });
+  let query = supabase.from("expenses").select(expenseSelect).eq("shop_id", access.shopId).order("spent_at", { ascending: false });
   if (params.get("from")) query = query.gte("spent_at", params.get("from")!);
   if (params.get("to")) query = query.lte("spent_at", params.get("to")!);
   const { data, error } = await query;
