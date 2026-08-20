@@ -9,6 +9,7 @@ import { POST as createPayment } from "@/app/api/customers/[id]/payments/route";
 import { POST as voidPayment } from "@/app/api/customers/[id]/payments/[paymentId]/void/route";
 import { GET as getActivity, POST as createActivity } from "@/app/api/activity/route";
 import { POST as createReminder } from "@/app/api/reminders/route";
+import { PATCH as updateReminder } from "@/app/api/reminders/[id]/route";
 import { GET as getReport } from "@/app/api/reports/route";
 import { POST as createExpense } from "@/app/api/expenses/route";
 import { GET as getTeam, POST as inviteTeam } from "@/app/api/team/route";
@@ -196,6 +197,21 @@ describe("authenticated API contracts", () => {
 
     expect(response.status).toBe(400);
     expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("scopes reminder updates to the current shop", async () => {
+    const single = vi.fn().mockResolvedValue({ data: { id: "reminder-1", status: "cancelled" }, error: null });
+    const select = vi.fn(() => ({ single }));
+    const eq = vi.fn(() => ({ eq, select }));
+    const update = vi.fn(() => ({ eq }));
+    const supabase = { from: vi.fn(() => ({ update })) };
+    authMock.mockResolvedValue({ supabase: supabase as never, user: { id: "user-1" } as never });
+
+    const response = await updateReminder(request({ status: "cancelled" }), { params: Promise.resolve({ id: "reminder-1" }) });
+
+    expect(response.status).toBe(200);
+    expect(eq).toHaveBeenCalledWith("id", "reminder-1");
+    expect(eq).toHaveBeenCalledWith("shop_id", "shop-1");
   });
 
   it("protects reports with authentication", async () => {
