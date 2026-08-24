@@ -15,14 +15,20 @@ export async function getDashboardData() {
   if (shopError || !shopId) {
     return { initialCustomers: [], initialStats: emptyStats, initialActivities: [], userEmail: userData.user.email ?? null, shopName: "Mahalla do'koni", liveMode: true, canManageMembers: false, initialError: "Faol do'kon topilmadi. Qayta kirib ko'ring." };
   }
-  const [{ data: profile }, { data, error }, { data: activityData }] = await Promise.all([
+  const [
+    { data: profile },
+    { data, error },
+    { data: activityData },
+    { data: shop },
+    { data: canManageMembers, error: permissionError }
+  ] = await Promise.all([
     supabase.from("profiles").select("shop_name").eq("id", userData.user.id).maybeSingle(),
     supabase.from("customers").select("id, name, phone, debts(id, principal, due_date, status, payments(amount, paid_at, voided_at))").eq("shop_id", shopId).order("created_at", { ascending: false }),
     supabase.from("activity_logs").select("id, customer_id, event_type, description, created_at").eq("shop_id", shopId).order("created_at", { ascending: false }).limit(10),
+    supabase.from("shops").select("name").eq("id", shopId).maybeSingle(),
+    supabase.rpc("has_shop_permission", { p_shop_id: shopId, p_permission: "member.manage" }),
   ]);
-  const { data: shop } = shopId ? await supabase.from("shops").select("name").eq("id", shopId).maybeSingle() : { data: null };
-  const { data: canManageMembers, error: permissionError } = shopId ? await supabase.rpc("has_shop_permission", { p_shop_id: shopId, p_permission: "member.manage" }) : { data: false, error: null };
-  const hasMemberManagement = !shopError && !permissionError && Boolean(canManageMembers);
+  const hasMemberManagement = !permissionError && Boolean(canManageMembers);
   const shopName = shop?.name?.trim() || profile?.shop_name?.trim() || "Mahalla do'koni";
   if (error) return { initialCustomers: [], initialStats: emptyStats, initialActivities: [], userEmail: userData.user.email ?? null, shopName, liveMode: true, canManageMembers: hasMemberManagement, initialError: "Ma'lumotlar olinmadi. Supabase jadval va RLS sozlamalarini tekshiring." };
   const customers: DashboardCustomer[] = (data ?? []).map((customer) => {
