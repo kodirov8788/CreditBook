@@ -2,7 +2,7 @@
 /* Uzbek Latin text intentionally uses apostrophes in visible labels. */
 /* eslint-disable react/no-unescaped-entities */
 
-import { useEffect, useMemo, useState, type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -49,6 +49,14 @@ type HistoryCacheEntry = { transactions: HistoryTransaction[]; savedAt: number }
 
 const historyCache = new Map<string, HistoryCacheEntry>();
 const HISTORY_CACHE_TTL = 30_000;
+
+function isCacheFresh(entry: HistoryCacheEntry | undefined) {
+  return Boolean(entry && Date.now() - entry.savedAt < HISTORY_CACHE_TTL);
+}
+
+function saveHistoryCache(id: string, transactions: HistoryTransaction[]) {
+  historyCache.set(id, { transactions, savedAt: Date.now() });
+}
 
 function formatMoney(value: number) {
   return `${money.format(value)} so'm`;
@@ -142,20 +150,92 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   const [correctionId, setCorrectionId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [signingOut, setSigningOut] = useState(false);
-  const [activeSection, setActiveSection] = useState(initialView === "reminders" || initialView === "reports" ? "more" : initialView);
+  const [currentView, setCurrentView] = useState<DashboardView>(initialView);
   const [todayLabel, setTodayLabel] = useState("Bugun");
   const supabase = hasSupabaseEnv() ? createClient() : null;
   const router = useRouter();
 
+  const loadReminders = useCallback(async () => {
+    setReminderLoading(true);
+    setReminderError("");
+    if (!liveMode) {
+      setReminderError("Eslatmalar uchun Supabase ulanishi kerak.");
+      setReminderLoading(false);
+      return;
+    }
+    const response = await fetch("/api/reminders");
+    const payload = await response.json().catch(() => null) as { reminders?: ReminderItem[]; error?: string } | null;
+    if (!response.ok) setReminderError(payload?.error || "Eslatmalar olinmadi.");
+    else setReminders(payload?.reminders ?? []);
+    setReminderLoading(false);
+  }, [liveMode]);
+
+  const refreshActivities = useCallback(async () => {
+    if (!liveMode) return;
+    const response = await fetch("/api/activity?page=1&pageSize=10", { cache: "no-store" });
+    const payload = await response.json().catch(() => null) as { activities?: ActivityItem[] } | null;
+    if (response.ok && payload?.activities) setActivities(payload.activities);
+  }, [liveMode]);
+
+  const loadReport = useCallback(async (range: { from: string; to: string }) => {
+    setReportLoading(true);
+    setReportError("");
+    if (!liveMode) {
+      setReportError("Hisobot uchun Supabase ulanishi kerak.");
+      setReportLoading(false);
+      return;
+    }
+    const params = new URLSearchParams();
+    if (range.from) params.set("from", range.from);
+    if (range.to) params.set("to", range.to);
+    const response = await fetch(`/api/reports?${params.toString()}`);
+    const payload = await response.json().catch(() => null) as { report?: ReportData; error?: string } | null;
+    if (!response.ok || !payload?.report) setReportError(payload?.error || "Hisobot olinmadi.");
+    else setReport(payload.report);
+    setReportLoading(false);
+  }, [liveMode]);
+
+  const navigateToView = useCallback((view: DashboardView) => {
+    setCurrentView(view);
+    if (view === "reminders" || view === "reports") {
+      setMoreView(view);
+      if (view === "reminders") void loadReminders();
+      if (view === "reports") void loadReport(reportRange);
+    } else {
+      setMoreView(null);
+      if (view === "activity") void refreshActivities();
+    }
+    const targetPath = view === "dashboard" ? "/dashboard" : `/${view}`;
+    if (typeof window !== "undefined" && window.location.pathname !== targetPath) {
+      window.history.pushState(null, "", targetPath);
+    }
+  }, [loadReminders, loadReport, refreshActivities, reportRange]);
+
   useEffect(() => {
     function syncActiveSection() {
-      setActiveSection(window.location.hash.replace(/^#/, "") || (initialView === "reminders" || initialView === "reports" ? "more" : initialView));
+      const pathname = (window.location.pathname.replace(/^\//, "") || "dashboard") as DashboardView;
+      const hash = window.location.hash.replace(/^#/, "") as DashboardView;
+      const target = (hash || pathname || initialView) as DashboardView;
+      if (["dashboard", "customers", "activity", "reminders", "reports"].includes(target)) {
+        setCurrentView(target);
+        if (target === "reminders" || target === "reports") {
+          setMoreView(target);
+          if (target === "reminders") void loadReminders();
+          if (target === "reports") void loadReport(reportRange);
+        } else {
+          setMoreView(null);
+        }
+      }
     }
 
     syncActiveSection();
     window.addEventListener("hashchange", syncActiveSection);
-    return () => window.removeEventListener("hashchange", syncActiveSection);
-  }, [initialView]);
+    window.addEventListener("popstate", syncActiveSection);
+    return () => {
+      window.removeEventListener("hashchange", syncActiveSection);
+      window.removeEventListener("popstate", syncActiveSection);
+    };
+  }, [initialView, loadReminders, loadReport, reportRange]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -197,8 +277,8 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   async function loadCustomerHistory(customer: DashboardCustomer) {
     setHistoryCustomerId(customer.id);
     const cached = historyCache.get(customer.id);
-    const hasFreshCache = cached && Date.now() - cached.savedAt < HISTORY_CACHE_TTL;
-    if (hasFreshCache) {
+    const hasFreshCache = isCacheFresh(cached);
+    if (hasFreshCache && cached) {
       setHistoryTransactions(cached.transactions);
     }
     setHistoryLoading(!hasFreshCache);
@@ -225,7 +305,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
       setHistoryError("Tarix olinmadi. Qayta urinib ko'ring.");
     } else {
       const transactions = payload.transactions;
-      historyCache.set(customer.id, { transactions, savedAt: Date.now() });
+      saveHistoryCache(customer.id, transactions);
       setHistoryTransactions(transactions);
     }
     setHistoryLoading(false);
@@ -317,35 +397,6 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     router.push("/login");
   }
 
-  async function loadReminders() {
-    setReminderLoading(true);
-    setReminderError("");
-    if (!liveMode) {
-      setReminderError("Eslatmalar uchun Supabase ulanishi kerak.");
-      setReminderLoading(false);
-      return;
-    }
-    const response = await fetch("/api/reminders");
-    const payload = await response.json().catch(() => null) as { reminders?: ReminderItem[]; error?: string } | null;
-    if (!response.ok) setReminderError(payload?.error || "Eslatmalar olinmadi.");
-    else setReminders(payload?.reminders ?? []);
-    setReminderLoading(false);
-  }
-
-  async function refreshActivities() {
-    if (!liveMode) return;
-    const response = await fetch("/api/activity?page=1&pageSize=10", { cache: "no-store" });
-    const payload = await response.json().catch(() => null) as { activities?: ActivityItem[] } | null;
-    if (response.ok && payload?.activities) setActivities(payload.activities);
-  }
-
-  function openMoreView(view: MoreView) {
-    setMoreOpen(false);
-    setMoreView(view);
-    if (view === "reminders") void loadReminders();
-    if (view === "reports") void loadReport(reportRange);
-  }
-
   async function saveReminder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setReminderError("");
@@ -409,24 +460,6 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     } finally {
       setReminderActionId(null);
     }
-  }
-
-  async function loadReport(range: { from: string; to: string }) {
-    setReportLoading(true);
-    setReportError("");
-    if (!liveMode) {
-      setReportError("Hisobot uchun Supabase ulanishi kerak.");
-      setReportLoading(false);
-      return;
-    }
-    const params = new URLSearchParams();
-    if (range.from) params.set("from", range.from);
-    if (range.to) params.set("to", range.to);
-    const response = await fetch(`/api/reports?${params.toString()}`);
-    const payload = await response.json().catch(() => null) as { report?: ReportData; error?: string } | null;
-    if (!response.ok || !payload?.report) setReportError(payload?.error || "Hisobot olinmadi.");
-    else setReport(payload.report);
-    setReportLoading(false);
   }
 
   async function saveExpense(event: FormEvent<HTMLFormElement>) {
@@ -693,11 +726,11 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
       <aside className="sidebar">
         <div className="brand"><div className="brand-mark">C</div><div className="brand-name">CreditBook</div></div>
         <nav className="nav-list" aria-label="Asosiy menyu">
-          <Link className={`nav-item ${activeSection === "dashboard" ? "active" : ""}`} href="/dashboard"><LayoutDashboard size={18} />Bosh sahifa</Link>
-          <Link className={`nav-item ${activeSection === "customers" ? "active" : ""}`} href="/customers"><Users size={18} />Mijozlar</Link>
-          <Link className={`nav-item ${activeSection === "activity" ? "active" : ""}`} href="/activity"><CircleDollarSign size={18} />Faoliyat</Link>
-          <Link className={`nav-item ${moreView === "reminders" ? "active" : ""}`} href="/reminders"><Bell size={18} />Eslatmalar</Link>
-          <Link className={`nav-item ${moreView === "reports" ? "active" : ""}`} href="/reports"><ArrowDownToLine size={18} />Hisobot</Link>
+          <Link className={`nav-item ${currentView === "dashboard" && !moreView ? "active" : ""}`} href="/dashboard" onClick={(e) => { e.preventDefault(); navigateToView("dashboard"); }}><LayoutDashboard size={18} />Bosh sahifa</Link>
+          <Link className={`nav-item ${currentView === "customers" && !moreView ? "active" : ""}`} href="/customers" onClick={(e) => { e.preventDefault(); navigateToView("customers"); }}><Users size={18} />Mijozlar</Link>
+          <Link className={`nav-item ${currentView === "activity" && !moreView ? "active" : ""}`} href="/activity" onClick={(e) => { e.preventDefault(); navigateToView("activity"); }}><CircleDollarSign size={18} />Faoliyat</Link>
+          <Link className={`nav-item ${moreView === "reminders" ? "active" : ""}`} href="/reminders" onClick={(e) => { e.preventDefault(); navigateToView("reminders"); }}><Bell size={18} />Eslatmalar</Link>
+          <Link className={`nav-item ${moreView === "reports" ? "active" : ""}`} href="/reports" onClick={(e) => { e.preventDefault(); navigateToView("reports"); }}><ArrowDownToLine size={18} />Hisobot</Link>
           {canManageMembers && <Link className="nav-item" href="/team"><Users size={18} />Jamoa</Link>}
         </nav>
         <div className="sidebar-spacer" />
@@ -708,18 +741,18 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
         <header className="topbar">
           <div className="mobile-brand"><div className="brand-mark">C</div><strong>CreditBook</strong></div>
           <div className="topbar-copy"><div className="topbar-title">{todayLabel}</div><div className="topbar-subtitle">Qarzlarni oson nazorat qiling.</div></div>
-          <div className="user-chip"><span>{userEmail ?? "Sinov rejimi"}</span><div className="avatar">{userEmail ? initials(userEmail) : "SR"}</div><button className="icon-button mobile-notice" onClick={() => setMoreOpen(true)} aria-label="Eslatmalarni ochish"><Bell size={19} /></button><button className="icon-button" onClick={() => void handleLogout()} disabled={signingOut} aria-label="Chiqish" title="Chiqish"><LogOut size={18} /></button></div>
+          <div className="user-chip"><span>{userEmail ?? "Sinov rejimi"}</span><div className="avatar">{userEmail ? initials(userEmail) : "SR"}</div><button className="icon-button mobile-notice" onClick={() => { setMoreOpen(false); navigateToView("reminders"); }} aria-label="Eslatmalarni ochish"><Bell size={19} /></button><button className="icon-button" onClick={() => void handleLogout()} disabled={signingOut} aria-label="Chiqish" title="Chiqish"><LogOut size={18} /></button></div>
         </header>
 
         <div className="page" id="dashboard">
-          {initialView === "dashboard" && <section className="hero">
+          {currentView === "dashboard" && <section className="hero">
             <div><div className="eyebrow">Bugun</div><h1>Qarzlar tayyor.</h1><p>Do'koningizdagi qoldiqni bir necha bosishda yozing.</p></div>
             <button className="button button-primary hero-action" onClick={() => setActionSheetOpen(true)}><Plus size={19} />Yozuv qo'shish</button>
           </section>}
 
           {notice && <div className={`notice ${notice.tone}`} role="status"><Check size={17} /><span>{notice.text}</span><button className="notice-close" onClick={() => setNotice(null)} aria-label="Xabarni yopish"><X size={16} /></button></div>}
 
-          {initialView === "dashboard" && <section className="stats-grid" aria-label="Umumiy qarz holati">
+          {currentView === "dashboard" && <section className="stats-grid" aria-label="Umumiy qarz holati">
             <StatCard label="Jami qoldiq" value={formatMoney(stats.totalOutstanding)} icon={<WalletCards size={17} />} foot="Faol qarzlar" />
             <StatCard label="Kechikkan" value={formatMoney(stats.overdueAmount)} icon={<Clock3 size={17} />} foot="E'tibor kerak" footClass="warn" />
             <StatCard label="Bu oy to'lov" value={formatMoney(stats.collectedThisMonth)} icon={<Check size={17} />} foot="Yig'ilgan summa" footClass="good" />
@@ -730,25 +763,25 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
           {liveMode && initialError && <div className="setup-note"><strong>Ulanish holati:</strong> {initialError}</div>}
 
           <section className="content-grid">
-            {(initialView === "dashboard" || initialView === "customers") && <div className="panel customers-panel" id="customers">
+            {(currentView === "dashboard" || currentView === "customers") && <div className="panel customers-panel" id="customers">
               <div className="panel-heading"><div><div className="panel-title">Mijozlar</div><div className="panel-subtitle">Barcha mijozlar</div></div><button className="button button-secondary panel-add" onClick={openAddCustomer}><Plus size={17} />Mijoz</button></div>
               <div className="search-wrap"><div className="search-box"><Search size={17} aria-hidden="true" /><input className="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Mijoz qidirish..." aria-label="Mijoz qidirish" /></div></div>
               <div className="customer-list">{filteredCustomers.length ? filteredCustomers.map((customer) => <CustomerRow customer={customer} key={customer.id} onAction={openQuickAction} onOpen={() => openCustomerDetails(customer)} />) : <div className="empty"><Users size={28} /><strong>Mijoz topilmadi.</strong><span>Boshqa ism yoki telefon bilan qidiring.</span><button className="button button-secondary" onClick={openAddCustomer}><Plus size={16} />Mijoz qo'shish</button></div>}</div>
             </div>}
 
-            {initialView === "dashboard" && <div className="panel activity-panel" id="activity">
+            {currentView === "dashboard" && <div className="panel activity-panel" id="activity">
               <div className="panel-heading"><div><div className="panel-title">So'nggi ishlar</div><div className="panel-subtitle">Daftardagi oxirgi o'zgarishlar</div></div><BookOpen size={18} className="panel-icon" /></div>
               <div className="activity-list">{activities.length ? activities.map((activity) => <ActivityRow activity={activity} key={activity.id} />) : <div className="empty compact"><BookOpen size={26} /><strong>{liveMode ? "Faoliyat shu yerda chiqadi." : "Supabase ulanishi kerak."}</strong><span>{liveMode ? "Yangi qarz yoki to'lov yozing." : "Haqiqiy ma'lumotlar uchun login qiling."}</span></div>}</div>
             </div>}
-            {initialView === "activity" && <ActivityFeed initialActivities={activities} customers={customers} liveMode={liveMode} />}
+            {currentView === "activity" && <ActivityFeed initialActivities={activities} customers={customers} liveMode={liveMode} />}
           </section>
         </div>
       </main>
 
       <nav className="mobile-nav" aria-label="Mobil menyu">
-        <Link className={`mobile-nav-item ${activeSection === "dashboard" ? "active" : ""}`} href="/dashboard"><LayoutDashboard size={19} /><span>Bosh</span></Link>
-        <Link className={`mobile-nav-item ${activeSection === "customers" ? "active" : ""}`} href="/customers"><Users size={19} /><span>Mijozlar</span></Link>
-        <Link className={`mobile-nav-item ${activeSection === "activity" ? "active" : ""}`} href="/activity"><CircleDollarSign size={19} /><span>Faoliyat</span></Link>
+        <Link className={`mobile-nav-item ${currentView === "dashboard" && !moreView ? "active" : ""}`} href="/dashboard" onClick={(e) => { e.preventDefault(); navigateToView("dashboard"); }}><LayoutDashboard size={19} /><span>Bosh</span></Link>
+        <Link className={`mobile-nav-item ${currentView === "customers" && !moreView ? "active" : ""}`} href="/customers" onClick={(e) => { e.preventDefault(); navigateToView("customers"); }}><Users size={19} /><span>Mijozlar</span></Link>
+        <Link className={`mobile-nav-item ${currentView === "activity" && !moreView ? "active" : ""}`} href="/activity" onClick={(e) => { e.preventDefault(); navigateToView("activity"); }}><CircleDollarSign size={19} /><span>Faoliyat</span></Link>
         <button className="mobile-nav-item" onClick={() => setMoreOpen(true)}><Ellipsis size={19} /><span>Yana</span></button>
       </nav>
 
@@ -764,11 +797,11 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
 
       {historyOpen && historyCustomer && <div className="history-backdrop" role="presentation" onClick={closeHistory}><section className="history-screen" role="dialog" aria-modal="true" aria-labelledby="history-title" onClick={(event) => event.stopPropagation()}><div className="history-screen-head"><div><div className="eyebrow">Mijoz tarixi</div><h2 id="history-title">{historyCustomer.name}</h2><p>{historyTransactions.length} ta yozuv · Qoldiq {formatMoney(historyCustomer.balance)}</p></div><button className="icon-button" onClick={closeHistory} aria-label="Tarixni yopish"><X size={20} /></button></div><div className="history-controls"><div className="history-filters" role="tablist" aria-label="Tarix turi"><button className={`history-filter ${historyFilter === "all" ? "active" : ""}`} onClick={() => setHistoryFilter("all")} aria-pressed={historyFilter === "all"}>Barchasi</button><button className={`history-filter ${historyFilter === "credit" ? "active" : ""}`} onClick={() => setHistoryFilter("credit")} aria-pressed={historyFilter === "credit"}>Qarz</button><button className={`history-filter ${historyFilter === "payment" ? "active" : ""}`} onClick={() => setHistoryFilter("payment")} aria-pressed={historyFilter === "payment"}>To'lov</button></div><div className="history-search"><Search size={17} aria-hidden="true" /><input value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Tarixdan qidirish..." aria-label="Tarixdan qidirish" /></div></div>{historyLoading ? <div className="history-empty"><BookOpen size={29} /><strong>Tarix yuklanmoqda...</strong><span>Yozuvlar olinmoqda.</span></div> : historyError ? <div className="history-empty"><BookOpen size={29} /><strong>Tarixni olib bo'lmadi.</strong><span>{historyError}</span><button className="button button-secondary" onClick={() => void loadCustomerHistory(historyCustomer)}>Qayta yuklash</button></div> : historyGroups.length ? <div className="history-groups">{historyGroups.map((group) => <section className="history-group" key={group.key}><h3 className="history-group-title">{group.label}</h3><div className="history-list">{group.transactions.map((transaction) => <TransactionRow transaction={transaction} key={transaction.id} onReverse={reverseTransaction} reversing={correctionId === transaction.id} />)}</div></section>)}</div> : <div className="history-empty"><BookOpen size={29} /><strong>Bu filtrda yozuv yo'q.</strong><span>Qidiruv yoki filtrni o'zgartirib ko'ring.</span>{(historySearch || historyFilter !== "all") && <button className="button button-secondary" onClick={() => { setHistorySearch(""); setHistoryFilter("all"); }}>Filtrni tozalash</button>}</div>}</section></div>}
 
-      {moreOpen && <div className="sheet-backdrop" role="presentation" onClick={() => setMoreOpen(false)}><section className="sheet small-sheet" role="dialog" aria-modal="true" aria-labelledby="more-title" onClick={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="sheet-heading"><div><div className="eyebrow">Qo'shimcha</div><h2 id="more-title">Yana</h2></div><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label="Yopish"><X size={19} /></button></div><div className="more-list"><button onClick={() => openMoreView("reminders")}><Bell size={18} /><span><strong>Eslatmalar</strong><small>Muddatlarni eslab qolish</small></span><ChevronRight size={17} /></button><button onClick={() => openMoreView("reports")}><ArrowDownToLine size={18} /><span><strong>Hisobot</strong><small>Qarz va to'lov tahlili</small></span><ChevronRight size={17} /></button>{canManageMembers && <Link className="more-list-link" href="/team" onClick={() => setMoreOpen(false)}><Users size={18} /><span><strong>Jamoa</strong><small>Xodimlar va rollar</small></span><ChevronRight size={17} /></Link>}</div></section></div>}
+      {moreOpen && <div className="sheet-backdrop" role="presentation" onClick={() => setMoreOpen(false)}><section className="sheet small-sheet" role="dialog" aria-modal="true" aria-labelledby="more-title" onClick={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="sheet-heading"><div><div className="eyebrow">Qo'shimcha</div><h2 id="more-title">Yana</h2></div><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label="Yopish"><X size={19} /></button></div><div className="more-list"><button onClick={() => { setMoreOpen(false); navigateToView("reminders"); }}><Bell size={18} /><span><strong>Eslatmalar</strong><small>Muddatlarni eslab qolish</small></span><ChevronRight size={17} /></button><button onClick={() => { setMoreOpen(false); navigateToView("reports"); }}><ArrowDownToLine size={18} /><span><strong>Hisobot</strong><small>Qarz va to'lov tahlili</small></span><ChevronRight size={17} /></button>{canManageMembers && <Link className="more-list-link" href="/team" onClick={() => setMoreOpen(false)}><Users size={18} /><span><strong>Jamoa</strong><small>Xodimlar va rollar</small></span><ChevronRight size={17} /></Link>}</div></section></div>}
 
-      {moreView === "reminders" && <ReminderPanel reminders={reminders} customers={customers} loading={reminderLoading} saving={reminderSaving} actionId={reminderActionId} error={reminderError} form={reminderForm} setForm={setReminderForm} editingId={editingReminderId} onSubmit={saveReminder} onEdit={editReminder} onCancel={cancelReminder} onSend={sendReminder} onClose={() => setMoreView(null)} onClear={() => { setEditingReminderId(null); setReminderForm({ customerId: "", scheduledFor: nextHourInputValue(), message: "", channel: "manual" }); }} />}
+      {moreView === "reminders" && <ReminderPanel reminders={reminders} customers={customers} loading={reminderLoading} saving={reminderSaving} actionId={reminderActionId} error={reminderError} form={reminderForm} setForm={setReminderForm} editingId={editingReminderId} onSubmit={saveReminder} onEdit={editReminder} onCancel={cancelReminder} onSend={sendReminder} onClose={() => { setMoreView(null); navigateToView(currentView === "reminders" ? "dashboard" : currentView); }} onClear={() => { setEditingReminderId(null); setReminderForm({ customerId: "", scheduledFor: nextHourInputValue(), message: "", channel: "manual" }); }} />}
 
-      {moreView === "reports" && <div className="modal-backdrop" role="presentation" onClick={() => setMoreView(null)}><div className="modal more-modal" role="dialog" aria-modal="true" aria-labelledby="reports-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Raqamlar</div><h2 id="reports-title">Hisobot</h2></div><button className="icon-button" onClick={() => setMoreView(null)} aria-label="Hisobotni yopish"><X size={19} /></button></div><ReportPanel report={report} reportLoading={reportLoading} reportError={reportError} reportRange={reportRange} setReportRange={setReportRange} expenseForm={expenseForm} setExpenseForm={setExpenseForm} expenseError={expenseError} expenseSaving={expenseSaving} onRefresh={() => void loadReport(reportRange)} onSaveExpense={saveExpense} onVoidExpense={voidExpense} /></div></div>}
+      {moreView === "reports" && <div className="modal-backdrop" role="presentation" onClick={() => { setMoreView(null); navigateToView(currentView === "reports" ? "dashboard" : currentView); }}><div className="modal more-modal" role="dialog" aria-modal="true" aria-labelledby="reports-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Raqamlar</div><h2 id="reports-title">Hisobot</h2></div><button className="icon-button" onClick={() => { setMoreView(null); navigateToView(currentView === "reports" ? "dashboard" : currentView); }} aria-label="Hisobotni yopish"><X size={19} /></button></div><ReportPanel report={report} reportLoading={reportLoading} reportError={reportError} reportRange={reportRange} setReportRange={setReportRange} expenseForm={expenseForm} setExpenseForm={setExpenseForm} expenseError={expenseError} expenseSaving={expenseSaving} onRefresh={() => void loadReport(reportRange)} onSaveExpense={saveExpense} onVoidExpense={voidExpense} /></div></div>}
     </div>
   );
 }
