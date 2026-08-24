@@ -211,9 +211,55 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     }
   }, [loadReminders, loadReport, refreshActivities, reportRange]);
 
+  const loadCustomerHistory = useCallback(async (customer: DashboardCustomer) => {
+    setHistoryCustomerId(customer.id);
+    const cached = historyCache.get(customer.id);
+    const hasFreshCache = isCacheFresh(cached);
+    if (hasFreshCache && cached) {
+      setHistoryTransactions(cached.transactions);
+    }
+    setHistoryLoading(!hasFreshCache);
+    setHistoryError("");
+
+    if (!liveMode) {
+      setHistoryTransactions([]);
+      setHistoryError("Supabase ulanishi sozlanmagan.");
+      setHistoryLoading(false);
+      return;
+    }
+
+    if (!supabase) {
+      setHistoryTransactions([]);
+      setHistoryError("Tarixni ko'rish uchun ulanish kerak.");
+      setHistoryLoading(false);
+      return;
+    }
+
+    const response = await fetch(`/api/customers/${customer.id}/history`, { cache: "no-store" });
+    const payload = await response.json().catch(() => null) as { transactions?: HistoryTransaction[] } | null;
+    if (!response.ok || !Array.isArray(payload?.transactions)) {
+      setHistoryTransactions([]);
+      setHistoryError("Tarix olinmadi. Qayta urinib ko'ring.");
+    } else {
+      const transactions = payload.transactions;
+      saveHistoryCache(customer.id, transactions);
+      setHistoryTransactions(transactions);
+    }
+    setHistoryLoading(false);
+  }, [liveMode, supabase]);
+
   useEffect(() => {
     function syncActiveSection() {
-      const pathname = (window.location.pathname.replace(/^\//, "") || "dashboard") as DashboardView;
+      const rawPath = window.location.pathname.replace(/^\//, "");
+      if (rawPath.startsWith("customers/") && rawPath.split("/")[1]) {
+        const customerId = rawPath.split("/")[1];
+        setSelectedCustomerId(customerId);
+        const customer = customers.find((item) => item.id === customerId);
+        if (customer) void loadCustomerHistory(customer);
+        return;
+      }
+      setSelectedCustomerId(null);
+      const pathname = (rawPath || "dashboard") as DashboardView;
       const hash = window.location.hash.replace(/^#/, "") as DashboardView;
       const target = (hash || pathname || initialView) as DashboardView;
       if (["dashboard", "customers", "activity", "reminders", "reports"].includes(target)) {
@@ -235,7 +281,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
       window.removeEventListener("hashchange", syncActiveSection);
       window.removeEventListener("popstate", syncActiveSection);
     };
-  }, [initialView, loadReminders, loadReport, reportRange]);
+  }, [customers, initialView, loadCustomerHistory, loadReminders, loadReport, reportRange]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -274,52 +320,22 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     return groups;
   }, [filteredHistory]);
 
-  async function loadCustomerHistory(customer: DashboardCustomer) {
-    setHistoryCustomerId(customer.id);
-    const cached = historyCache.get(customer.id);
-    const hasFreshCache = isCacheFresh(cached);
-    if (hasFreshCache && cached) {
-      setHistoryTransactions(cached.transactions);
-    }
-    setHistoryLoading(!hasFreshCache);
-    setHistoryError("");
-
-    if (!liveMode) {
-      setHistoryTransactions([]);
-      setHistoryError("Supabase ulanishi sozlanmagan.");
-      setHistoryLoading(false);
-      return;
-    }
-
-    if (!supabase) {
-      setHistoryTransactions([]);
-      setHistoryError("Tarixni ko'rish uchun ulanish kerak.");
-      setHistoryLoading(false);
-      return;
-    }
-
-    const response = await fetch(`/api/customers/${customer.id}/history`, { cache: "no-store" });
-    const payload = await response.json().catch(() => null) as { transactions?: HistoryTransaction[] } | null;
-    if (!response.ok || !Array.isArray(payload?.transactions)) {
-      setHistoryTransactions([]);
-      setHistoryError("Tarix olinmadi. Qayta urinib ko'ring.");
-    } else {
-      const transactions = payload.transactions;
-      saveHistoryCache(customer.id, transactions);
-      setHistoryTransactions(transactions);
-    }
-    setHistoryLoading(false);
-  }
-
   function openCustomerDetails(customer: DashboardCustomer) {
-    if (liveMode) {
-      router.push(`/customers/${customer.id}`);
-      return;
-    }
     setSelectedCustomerId(customer.id);
     setHistoryFilter("all");
     setHistorySearch("");
     void loadCustomerHistory(customer);
+    if (typeof window !== "undefined") {
+      window.history.pushState(null, "", `/customers/${customer.id}`);
+    }
+  }
+
+  function closeCustomerDetails() {
+    setSelectedCustomerId(null);
+    if (typeof window !== "undefined") {
+      const targetPath = currentView === "dashboard" ? "/dashboard" : `/${currentView}`;
+      window.history.pushState(null, "", targetPath);
+    }
   }
 
   function openFullHistory(customer: DashboardCustomer) {
@@ -344,6 +360,10 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     setHistoryOpen(false);
     setHistoryFilter("all");
     setHistorySearch("");
+    if (typeof window !== "undefined") {
+      const targetPath = currentView === "dashboard" ? "/dashboard" : `/${currentView}`;
+      window.history.pushState(null, "", targetPath);
+    }
   }
 
   async function reverseTransaction(transaction: HistoryTransaction) {
@@ -793,7 +813,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
 
       {quickAction && <div className="modal-backdrop" role="presentation" onClick={closeQuickAction}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="quick-action-title" onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">{quickAction.customer.name}</div><h2 id="quick-action-title">{quickAction.type === "credit" ? "+ Qarz" : quickAction.type === "payment" ? "- To'lov" : "Tahrir"}</h2></div><button className="icon-button" onClick={closeQuickAction} aria-label="Yopish"><X size={19} /></button></div><form onSubmit={submitQuickAction}><div className="field-grid">{quickAction.type === "edit" ? <><div className="field full"><label htmlFor="quick-name">Mijoz ismi <span>*</span></label><input id="quick-name" required value={quickForm.name} onChange={(event) => setQuickForm({ ...quickForm, name: event.target.value })} autoComplete="name" /></div><div className="field full"><label htmlFor="quick-phone">Telefon</label><input id="quick-phone" type="tel" inputMode="tel" value={quickForm.phone} onChange={(event) => setQuickForm({ ...quickForm, phone: event.target.value })} autoComplete="tel" /></div></> : <><div className="field full"><label htmlFor="quick-amount">Summa <span>· Qoldiq: {formatMoney(quickAction.customer.balance)}</span></label><div className="money-input"><input id="quick-amount" type="number" inputMode="decimal" min="1" max={quickAction.type === "payment" ? quickAction.customer.balance : undefined} required value={quickForm.amount} onChange={(event) => setQuickForm({ ...quickForm, amount: event.target.value })} placeholder="0" /><span>so'm</span></div>{quickAction.type === "payment" && <button type="button" className="amount-shortcut" onClick={() => setQuickForm({ ...quickForm, amount: String(quickAction.customer.balance) })}>Hammasini yopish</button>}</div>{quickAction.type === "credit" && <div className="field"><label htmlFor="quick-due">Muddat</label><div className="date-input"><CalendarDays size={17} aria-hidden="true" /><input id="quick-due" type="date" value={quickForm.dueDate} onChange={(event) => setQuickForm({ ...quickForm, dueDate: event.target.value })} /></div></div>}<div className="field full"><label htmlFor="quick-note">Izoh <span>(ixtiyoriy)</span></label><input id="quick-note" value={quickForm.note} onChange={(event) => setQuickForm({ ...quickForm, note: event.target.value })} placeholder="Masalan: qayta xarid" /></div></>}</div>{quickError && <div className="form-error" role="alert">{quickError}</div>}<div className="modal-actions"><button type="button" className="button button-ghost" onClick={closeQuickAction}>Bekor</button><button type="submit" className="button button-primary" disabled={saving || (quickAction.type === "payment" && quickAction.customer.balance <= 0)}>{saving ? "Saqlanmoqda..." : "Saqlash"}</button></div></form></div></div>}
 
-      {selectedCustomer && <div className="sheet-backdrop" role="presentation" onClick={() => setSelectedCustomerId(null)}><section className="sheet customer-sheet" role="dialog" aria-modal="true" aria-labelledby="customer-sheet-title" onClick={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="customer-sheet-head"><div className="customer-avatar large">{initials(selectedCustomer.name)}</div><div><h2 id="customer-sheet-title">{selectedCustomer.name}</h2><p>{selectedCustomer.phone}</p></div><button className="icon-button" onClick={() => setSelectedCustomerId(null)} aria-label="Yopish"><X size={19} /></button></div><div className="customer-balance"><span>Qoldiq</span><strong className="money">{formatMoney(selectedCustomer.balance)}</strong><span className={`status ${selectedCustomer.status}`}>{statusLabels[selectedCustomer.status]}</span></div><div className="customer-sheet-meta"><div><span>Muddat</span><strong>{formatDate(selectedCustomer.dueDate)}</strong></div><div><span>Oxirgi to'lov</span><strong>{selectedCustomer.lastPayment ? formatDate(selectedCustomer.lastPayment.slice(0, 10)) : "Hali yo'q"}</strong></div></div><div className="customer-sheet-actions"><button className="button button-secondary" onClick={() => openQuickAction("credit", selectedCustomer)}><Plus size={17} />Qarz</button><button className="button button-primary" onClick={() => openQuickAction("payment", selectedCustomer)} disabled={selectedCustomer.balance <= 0}><Check size={17} />To'lov</button><button className="button button-ghost" onClick={() => openQuickAction("edit", selectedCustomer)}><Ellipsis size={18} />Tahrir</button></div><div className="recent-history"><div className="recent-history-heading"><div><h3>So'nggi yozuvlar</h3><span>{historyLoading ? "Yuklanmoqda..." : `${historyTransactions.length} ta yozuv`}</span></div><button className="text-button" onClick={() => openFullHistory(selectedCustomer)}>Barcha tarix</button></div>{historyLoading ? <div className="history-loading">Tarix yuklanmoqda...</div> : historyError ? <div className="history-error" role="alert"><span>{historyError}</span><button className="text-button" onClick={() => void loadCustomerHistory(selectedCustomer)}>Qayta</button></div> : historyTransactions.length ? <div className="history-list preview">{historyTransactions.slice(0, 3).map((transaction) => <TransactionRow transaction={transaction} key={transaction.id} />)}</div> : <div className="history-empty compact-history"><BookOpen size={21} /><span>Hali qarz yoki to'lov yozilmagan.</span></div>}</div><div className="sheet-note"><BookOpen size={17} /><span>Har bir yangi qarz va to'lov mijoz tarixida saqlanadi.</span></div></section></div>}
+      {selectedCustomer && <div className="sheet-backdrop" role="presentation" onClick={closeCustomerDetails}><section className="sheet customer-sheet" role="dialog" aria-modal="true" aria-labelledby="customer-sheet-title" onClick={(event) => event.stopPropagation()}><div className="sheet-handle" /><div className="customer-sheet-head"><div className="customer-avatar large">{initials(selectedCustomer.name)}</div><div><h2 id="customer-sheet-title">{selectedCustomer.name}</h2><p>{selectedCustomer.phone}</p></div><button className="icon-button" onClick={closeCustomerDetails} aria-label="Yopish"><X size={19} /></button></div><div className="customer-balance"><span>Qoldiq</span><strong className="money">{formatMoney(selectedCustomer.balance)}</strong><span className={`status ${selectedCustomer.status}`}>{statusLabels[selectedCustomer.status]}</span></div><div className="customer-sheet-meta"><div><span>Muddat</span><strong>{formatDate(selectedCustomer.dueDate)}</strong></div><div><span>Oxirgi to'lov</span><strong>{selectedCustomer.lastPayment ? formatDate(selectedCustomer.lastPayment.slice(0, 10)) : "Hali yo'q"}</strong></div></div><div className="customer-sheet-actions"><button className="button button-secondary" onClick={() => openQuickAction("credit", selectedCustomer)}><Plus size={17} />Qarz</button><button className="button button-primary" onClick={() => openQuickAction("payment", selectedCustomer)} disabled={selectedCustomer.balance <= 0}><Check size={17} />To'lov</button><button className="button button-ghost" onClick={() => openQuickAction("edit", selectedCustomer)}><Ellipsis size={18} />Tahrir</button></div><div className="recent-history"><div className="recent-history-heading"><div><h3>So'nggi yozuvlar</h3><span>{historyLoading ? "Yuklanmoqda..." : `${historyTransactions.length} ta yozuv`}</span></div><button className="text-button" onClick={() => openFullHistory(selectedCustomer)}>Barcha tarix</button></div>{historyLoading ? <div className="history-loading">Tarix yuklanmoqda...</div> : historyError ? <div className="history-error" role="alert"><span>{historyError}</span><button className="text-button" onClick={() => void loadCustomerHistory(selectedCustomer)}>Qayta</button></div> : historyTransactions.length ? <div className="history-list preview">{historyTransactions.slice(0, 3).map((transaction) => <TransactionRow transaction={transaction} key={transaction.id} />)}</div> : <div className="history-empty compact-history"><BookOpen size={21} /><span>Hali qarz yoki to'lov yozilmagan.</span></div>}</div><div className="sheet-note"><BookOpen size={17} /><span>Har bir yangi qarz va to'lov mijoz tarixida saqlanadi.</span></div></section></div>}
 
       {historyOpen && historyCustomer && <div className="history-backdrop" role="presentation" onClick={closeHistory}><section className="history-screen" role="dialog" aria-modal="true" aria-labelledby="history-title" onClick={(event) => event.stopPropagation()}><div className="history-screen-head"><div><div className="eyebrow">Mijoz tarixi</div><h2 id="history-title">{historyCustomer.name}</h2><p>{historyTransactions.length} ta yozuv · Qoldiq {formatMoney(historyCustomer.balance)}</p></div><button className="icon-button" onClick={closeHistory} aria-label="Tarixni yopish"><X size={20} /></button></div><div className="history-controls"><div className="history-filters" role="tablist" aria-label="Tarix turi"><button className={`history-filter ${historyFilter === "all" ? "active" : ""}`} onClick={() => setHistoryFilter("all")} aria-pressed={historyFilter === "all"}>Barchasi</button><button className={`history-filter ${historyFilter === "credit" ? "active" : ""}`} onClick={() => setHistoryFilter("credit")} aria-pressed={historyFilter === "credit"}>Qarz</button><button className={`history-filter ${historyFilter === "payment" ? "active" : ""}`} onClick={() => setHistoryFilter("payment")} aria-pressed={historyFilter === "payment"}>To'lov</button></div><div className="history-search"><Search size={17} aria-hidden="true" /><input value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Tarixdan qidirish..." aria-label="Tarixdan qidirish" /></div></div>{historyLoading ? <div className="history-empty"><BookOpen size={29} /><strong>Tarix yuklanmoqda...</strong><span>Yozuvlar olinmoqda.</span></div> : historyError ? <div className="history-empty"><BookOpen size={29} /><strong>Tarixni olib bo'lmadi.</strong><span>{historyError}</span><button className="button button-secondary" onClick={() => void loadCustomerHistory(historyCustomer)}>Qayta yuklash</button></div> : historyGroups.length ? <div className="history-groups">{historyGroups.map((group) => <section className="history-group" key={group.key}><h3 className="history-group-title">{group.label}</h3><div className="history-list">{group.transactions.map((transaction) => <TransactionRow transaction={transaction} key={transaction.id} onReverse={reverseTransaction} reversing={correctionId === transaction.id} />)}</div></section>)}</div> : <div className="history-empty"><BookOpen size={29} /><strong>Bu filtrda yozuv yo'q.</strong><span>Qidiruv yoki filtrni o'zgartirib ko'ring.</span>{(historySearch || historyFilter !== "all") && <button className="button button-secondary" onClick={() => { setHistorySearch(""); setHistoryFilter("all"); }}>Filtrni tozalash</button>}</div>}</section></div>}
 
