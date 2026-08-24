@@ -3,10 +3,10 @@ node_modules/
 out/
 .vercel/
 supabase/.temp/
-.env*
 !.env.example
 *.log
 .DS_Store
 .vercel
 test-results/
 *.tsbuildinfo
+config.bat
