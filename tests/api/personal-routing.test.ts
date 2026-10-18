@@ -22,4 +22,17 @@ describe("personal fallback",()=>{
     create.mockResolvedValue({auth:{getUser:async()=>({data:{user:null}})}} as never);
     await expect(getDashboardData({personalFallback:true})).rejects.toThrow("redirect:/login");
   });
+  it("keeps an active shop owner at the existing dashboard without personal provisioning",async()=>{
+    const rpc=vi.fn(async(name:string)=>({data:name==="get_current_shop_id"?"active-shop":true,error:null}));
+    const from=vi.fn((table:string)=>{
+      if(table==="profiles"||table==="shops")return {select:()=>({eq:()=>({maybeSingle:async()=>({data:table==="shops"?{name:"Existing shop"}:{shop_name:"Profile shop"},error:null})})})};
+      if(table==="customers")return {select:()=>({eq:()=>({order:async()=>({data:[],error:null})})})};
+      return {select:()=>({eq:()=>({order:()=>({limit:async()=>({data:[],error:null})})})})};
+    });
+    create.mockResolvedValue({auth:{getUser:async()=>({data:{user:{id:"owner",email:"owner@fixture.test"}}})},rpc,from} as never);
+    const result=await getDashboardData({personalFallback:true});
+    expect(result.shopName).toBe("Existing shop");expect(result.canManageMembers).toBe(true);
+    expect(rpc.mock.calls.map(([name])=>name)).toEqual(["get_current_shop_id","has_shop_permission"]);
+    expect(from).toHaveBeenCalledWith("customers");
+  });
 });

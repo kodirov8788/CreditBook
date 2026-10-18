@@ -12,7 +12,7 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
-docker --context colima run --name "$container" --label creditbook.test=g01 \
+docker --context colima run --network none --name "$container" --label creditbook.test=g01 \
   -e POSTGRES_HOST_AUTH_METHOD=trust -d "$image" >/dev/null
 created=true
 for attempt in {1..30}; do

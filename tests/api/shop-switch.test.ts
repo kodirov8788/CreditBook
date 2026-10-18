@@ -20,10 +20,10 @@ describe("shop switching", () => {
     await expect(listShops(request())).resolves.toMatchObject({ status: 401 });
   });
 
-  it("validates a shop id before calling Supabase", async () => {
+  it.each(["not-a-uuid", "-".repeat(36), "a".repeat(36), 123, {}])("validates shop id %s before calling Supabase", async shopId => {
     const rpc = vi.fn();
     authMock.mockResolvedValue({ supabase: { rpc } as never, user: { id: "user-1" } as never });
-    await expect(switchShop(request({ shopId: "not-a-uuid" }))).resolves.toMatchObject({ status: 400 });
+    await expect(switchShop(request({ shopId }))).resolves.toMatchObject({ status: 400 });
     expect(rpc).not.toHaveBeenCalled();
   });
 

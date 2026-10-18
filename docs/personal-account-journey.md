@@ -9,7 +9,8 @@ and 20261017031547 were applied and tested on production on 2026-10-18.
 
 - Root uses the existing verified shop lookup. A successful no-shop result opens
   `/personal`; shop errors remain errors, and explicit shop routes retain their
-  existing behavior. Invite activation/callback ordering is unchanged.
+  existing behavior. Successful invite activation/callback ordering is preserved; expired or failed
+  callbacks return a fixed Uzbek login error before invitation activation.
 - Personal onboarding reuses GET/POST `/api/personal/workspace`; GET never
   provisions, and the explicit POST creates/reuses the owner workspace.
 - GET/POST `/api/personal/accounts` reads reconciled accounts or invokes the
@@ -31,8 +32,12 @@ presentation split, not deletion or revaluation of money.
 
 The read API pages 50 accounts and reports `paginationLimitReached` rather than
 an invalid next link above offset 100000; totals still cover all accounts. The
-history API returns 50 entries plus its next offset. This G02 UI currently shows
-the first history page; complete filtered personal history remains G07 work.
+history API returns 50 entries plus an account-bound cursor ordered by recorded
+time and UUID. It preserves database microseconds and rejects malformed cursors
+before querying; new insertions do not shift later pages. The UI loads subsequent
+pages, deduplicates record IDs, retains rows after failures, ignores stale closed
+requests and restores keyboard focus. Filtered unified personal history remains
+G07 work.
 
 All management commands lock the same workspace used by account creation, then
 verify account and preference versions. A stale command returns 409. Required
@@ -97,8 +102,9 @@ not executed or retried through another surface. The second migration has only
 been applied in disposable tests. Both remain pending production approval and
 must be applied in dependency order after current history/source checks.
 
-No app deployment or PR merge occurred in this implementation slice. Current
-production still serves main; the new HTTP/UI paths are local. After approved
+No production app deployment or PR merge occurred in this implementation slice.
+Pushing PR #107 created an automatic Vercel preview. Production still serves
+main; the new HTTP/UI paths have not been released there. After approved
 migrations, verify real authenticated local/preview APIs with both synthetic
 owners, preserve production fingerprints, then prepare a reviewed source release.
 Do not blindly merge the draft stack or close G01/G02 from fixture evidence.
@@ -111,3 +117,26 @@ also require a bounded accepted contract. G03/G05/G04 follow this G02 work in
 dependency order. Notification delivery, speech provider/cost/audio retention,
 backup restore and offline behavior remain later explicit decisions; no paid
 provider or broader credential/access grant was introduced.
+
+
+## Local regression follow-up after a96cb81
+
+- Application/API suite: **199 passed**. Adds malformed return URL, provider and
+  expired credential errors, idempotent invitation replay, strict switch UUIDs,
+  active-shop root routing, cursor validation and exact paged history values.
+- Disposable PostgreSQL G01 suite: **46 assertions passed**, up from 38. Includes
+  replayed invitations, cancelled/suspended memberships and suspended shops.
+  The container now has `--network none`; no schema migration source changed.
+- `scripts/test-personal-history-ui.sh`: **2 mobile Chrome fixture tests passed**.
+  This runner temporarily renders the real account card with synthetic props,
+  intercepts history responses, uses no Auth or cloud credentials, and removes
+  the fixture page afterward. It checks 50+1 history, deduplication, rapid clicks,
+  failed-page retry, stale responses, keyboard focus, announcements and overflow.
+  The five earlier authenticated fixtures were not repeated in this local-only
+  follow-up; no new production authentication session was created.
+- Typecheck, lint and final production compilation are recorded in the local
+  follow-up evidence report. These results preceded the follow-up commit;
+  production migration, merge and deployment approvals remain separate gates.
+
+Both exact new migrations and the G03 overdraft decision remain pending. Nothing
+in the regression work authorizes applying either migration to production.

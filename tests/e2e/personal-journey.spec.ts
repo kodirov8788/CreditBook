@@ -31,7 +31,7 @@ test("mobile exact opening and lost-response recovery survives reload", async ({
   await expect(page.getByRole("button",{name:"Qayta urinish",exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:"+ Hisob",exact:true})).toBeDisabled();
   await page.getByRole("button",{name:"Qayta urinish",exact:true}).click();
-  await expect(page.getByRole("status")).toContainText("Hisob ochildi.");
+  await expect(page.getByRole("status").filter({hasText:"Hisob ochildi."})).toBeVisible();
   expect(commands.size).toBe(1); expect(accounts).toHaveLength(1);
   await expect(page.locator("article")).toHaveCount(1);
   await expect(page.locator("article")).toContainText("100 000.01");
@@ -82,7 +82,7 @@ test("mobile account management preserves money and exposes opening history",asy
  await expect(card.getByRole("button",{name:"Arxivdan olish",exact:true})).toBeVisible();
  await card.getByRole("button",{name:"Arxivdan olish",exact:true}).click();
  await expect(card.getByRole("button",{name:"Arxivlash",exact:true})).toBeVisible();
- await card.getByRole("button",{name:"Tarix",exact:true}).click();await expect(card.getByRole("region",{name:"Karta tarixi"})).toContainText("Boshlang‘ich");
+ await card.getByRole("button",{name:"Karta: tarix",exact:true}).click();await expect(card.getByRole("region",{name:"Karta tarixi"})).toContainText("Boshlang‘ich");
  expect(account.balanceMinor).toBe("10000000");
 });
 
@@ -103,7 +103,7 @@ test("restored rejected creation keeps major units when corrected",async({page})
  await expect(page.getByLabel("Boshlang‘ich qoldiq",{exact:true})).toHaveValue("100.00");
  await page.getByLabel("Nom",{exact:true}).fill("Tuzatilgan");
  await page.getByRole("button",{name:"Saqlash",exact:true}).click();
- await expect(page.getByRole("status")).toContainText("Hisob ochildi.");expect(attempts).toBe(3);
+ await expect(page.getByRole("status").filter({hasText:"Hisob ochildi."})).toBeVisible();expect(attempts).toBe(3);
 });
 
 test("restored management retry leaves new-account defaults intact",async({page})=>{
@@ -116,7 +116,7 @@ test("restored management retry leaves new-account defaults intact",async({page}
  await page.goto("/personal");const card=page.locator("article");await card.getByText("Boshqarish",{exact:true}).click();
  await card.getByRole("button",{name:"Arxivlash",exact:true}).click();
  await expect(page.getByRole("button",{name:"Qayta urinish",exact:true})).toBeVisible();await page.reload();
- await page.getByRole("button",{name:"Qayta urinish",exact:true}).click();await expect(page.getByRole("status")).toContainText("Hisob yangilandi.");
+ await page.getByRole("button",{name:"Qayta urinish",exact:true}).click();await expect(page.getByRole("status").filter({hasText:"Hisob yangilandi."})).toBeVisible();
  await page.getByRole("button",{name:"+ Hisob",exact:true}).click();
  await expect(page.getByLabel("Nom",{exact:true})).toHaveValue("Naqd");
  await expect(page.getByLabel("Boshlang‘ich qoldiq",{exact:true})).toHaveValue("0");

@@ -33,7 +33,8 @@ describe("auth callback", () => {
     const rpc = vi.fn();
     const exchangeCodeForSession = vi.fn().mockResolvedValue({ error: new Error("expired") });
     clientMock.mockResolvedValue({ auth: { exchangeCodeForSession }, rpc } as never);
-    await GET(request("?code=expired&shop_id=11111111-1111-4111-8111-111111111111"));
+    const response = await GET(request("?code=expired&shop_id=11111111-1111-4111-8111-111111111111"));
+    expect(response.headers.get("location")).toBe("https://creditbook.example/login?error_code=auth_failed");
     expect(rpc).not.toHaveBeenCalled();
   });
 
@@ -46,4 +47,49 @@ describe("auth callback", () => {
 
     expect(response.headers.get("location")).toBe("https://creditbook.example/login?error_code=invite_activation_failed");
   });
+});
+
+
+describe("callback failure and invitation regressions", () => {
+  beforeEach(() => clientMock.mockReset());
+  it.each(["http://[", "https://user:pass@creditbook.example/team", "//evil.example/team"])("falls back safely for next=%s", async next => {
+    clientMock.mockResolvedValue(null);
+    const response = await GET(request("?next=" + encodeURIComponent(next)));
+    expect(response.headers.get("location")).toBe("https://creditbook.example/");
+  });
+  it.each(["code", "token_hash"])("expired %s returns an explicit login error before invitation activation", async kind => {
+    const rpc = vi.fn();
+    const failed = vi.fn().mockResolvedValue({error:{code:"otp_expired",message:"private upstream details"}});
+    clientMock.mockResolvedValue({auth:{exchangeCodeForSession:failed,verifyOtp:failed},rpc} as never);
+    const response=await GET(request(`?${kind}=expired&type=email&next=%2Fteam&shop_id=11111111-1111-4111-8111-111111111111`));
+    expect(response.headers.get("location")).toBe("https://creditbook.example/login?error_code=otp_expired");
+    expect(rpc).not.toHaveBeenCalled();
+  });
+  it("rejects a token hash missing its type", async () => {
+    const rpc=vi.fn(),verifyOtp=vi.fn();
+    clientMock.mockResolvedValue({auth:{verifyOtp},rpc} as never);
+    const response=await GET(request("?token_hash=one&next=%2Fteam"));
+    expect(response.headers.get("location")).toContain("error_code=auth_failed");
+    expect(verifyOtp).not.toHaveBeenCalled();expect(rpc).not.toHaveBeenCalled();
+  });
+  it("does not send malformed invitation UUIDs to the RPC", async () => {
+    const rpc=vi.fn();
+    clientMock.mockResolvedValue({auth:{exchangeCodeForSession:vi.fn().mockResolvedValue({error:null})},rpc} as never);
+    const response=await GET(request("?code=one&shop_id="+"-".repeat(36)));
+    expect(response.headers.get("location")).toContain("error_code=invite_activation_failed");expect(rpc).not.toHaveBeenCalled();
+  });
+  it("allows the RPC's idempotent zero-change invitation replay", async () => {
+    const rpc=vi.fn().mockResolvedValue({data:0,error:null});
+    clientMock.mockResolvedValue({auth:{exchangeCodeForSession:vi.fn().mockResolvedValue({error:null})},rpc} as never);
+    const response=await GET(request("?code=one&next=%2Fteam&shop_id=11111111-1111-4111-8111-111111111111"));
+    expect(response.headers.get("location")).toBe("https://creditbook.example/team");expect(rpc).toHaveBeenCalledOnce();
+  });
+});
+
+
+it.each(["otp_expired", "unknown_error"])("handles provider error query %s without credentials or activation", async code => {
+  clientMock.mockReset();
+  const response=await GET(request(`?error=access_denied&error_code=${code}&error_description=private&next=%2Fteam`));
+  expect(response.headers.get("location")).toBe(`https://creditbook.example/login?error_code=${code === "otp_expired" ? "otp_expired" : "auth_failed"}`);
+  expect(clientMock).not.toHaveBeenCalled();
 });
