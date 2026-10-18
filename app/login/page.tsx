@@ -11,7 +11,7 @@ function LoginForm() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const callbackError = searchParams.get("error_code");
-  const callbackMessage = callbackError === "otp_expired" ? "Email havolasi eskirgan yoki avval ishlatilgan. Yangi havola so'rang." : callbackError === "invite_activation_failed" ? "Taklifni faollashtirib bo'lmadi. Do'kon egasidan yangi taklif so'rang." : "";
+  const callbackMessage = callbackError === "otp_expired" ? "Email havolasi eskirgan yoki avval ishlatilgan. Yangi havola so'rang." : callbackError === "invite_activation_failed" ? "Taklifni faollashtirib bo'lmadi. Do'kon egasidan yangi taklif so'rang." : callbackError === "auth_failed" ? "Kirish havolasi tasdiqlanmadi. Yangi havola so‘rang." : "";
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -25,7 +25,7 @@ function LoginForm() {
     setLoading(false);
   }
 
-  return <main className="login-shell"><div className="login-card"><div className="brand" style={{ padding: 0, color: "var(--ink)" }}><div className="brand-mark">C</div><div className="brand-name">CreditBook</div></div><h1>Xush kelibsiz.</h1><p className="muted" style={{ lineHeight: 1.5 }}>Qarz daftaringizga kiring.</p><form onSubmit={handleLogin}><div className="field"><label htmlFor="email">Email</label><input id="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="siz@example.com" /></div><button className="button button-primary" disabled={loading}>{loading ? "Yuborilmoqda..." : "Kirish havolasini yuborish"}</button></form>{(message || callbackMessage) && <p className="setup-note">{message || callbackMessage}</p>}<p className="muted" style={{ fontSize: 12, marginTop: 22 }}><Link href="/">Bosh sahifaga qaytish</Link></p>{!hasSupabaseEnv() && <p className="muted" style={{ fontSize: 11, marginTop: 20 }}>Supabase hali sozlanmagan.</p>}</div></main>;
+  return <main className="login-shell"><div className="login-card"><div className="brand" style={{ padding: 0, color: "var(--ink)" }}><div className="brand-mark">C</div><div className="brand-name">CreditBook</div></div><h1>Xush kelibsiz.</h1><p className="muted" style={{ lineHeight: 1.5 }}>Qarz daftaringizga kiring.</p><form onSubmit={handleLogin}><div className="field"><label htmlFor="email">Email</label><input id="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="siz@example.com" /></div><button className="button button-primary" disabled={loading}>{loading ? "Yuborilmoqda..." : "Kirish havolasini yuborish"}</button></form>{(message || callbackMessage) && <p role={callbackMessage ? "alert" : "status"} className="setup-note">{message || callbackMessage}</p>}<p className="muted" style={{ fontSize: 12, marginTop: 22 }}><Link href="/">Bosh sahifaga qaytish</Link></p>{!hasSupabaseEnv() && <p className="muted" style={{ fontSize: 11, marginTop: 20 }}>Supabase hali sozlanmagan.</p>}</div></main>;
 }
 
 export default function LoginPage() {

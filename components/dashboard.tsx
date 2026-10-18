@@ -785,6 +785,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
           <div className="mobile-brand"><div className="brand-mark">C</div><strong>CreditBook</strong></div>
           <div className="topbar-copy"><div className="topbar-title">{todayLabel}</div><div className="topbar-subtitle">Qarzlarni oson nazorat qiling.</div></div>
           <div className="user-chip">
+            <Link className="button" href="/personal">Shaxsiy</Link>
             <span>{userEmail ?? "Sinov rejimi"}</span>
             <div className="avatar">{userEmail ? initials(userEmail) : "SR"}</div>
             <button className="theme-toggle-btn" onClick={toggleTheme} aria-label="Rejimni almashtirish" title="Rejimni almashtirish">{theme === "dark" ? "☀️" : "🌙"}</button>

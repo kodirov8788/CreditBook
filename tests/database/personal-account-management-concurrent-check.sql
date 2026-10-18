@@ -1,0 +1,5 @@
+select public.g02_assert((select count(*) from public.g02_manage_race_results where result='success')=1 and (select count(*) from public.g02_manage_race_results where result='conflict')=1,'concurrent same-version management commits once');
+select public.g02_assert((select a.version=f.version+1 from public.personal_accounts a join public.g02_manage_race_fixture f on a.id=f.id),'winning management increments version once');
+select public.g02_assert((select count(*) from public.personal_audit_events where workspace_id=(select workspace_id from public.g02_manage_race_fixture))=(select audit_count+1 from public.g02_manage_race_fixture),'losing management creates no audit');
+select public.g02_assert((select count(*) from creditbook_private.personal_command_receipts where workspace_id=(select workspace_id from public.g02_manage_race_fixture))=(select receipt_count+1 from public.g02_manage_race_fixture),'losing management creates no receipt');
+select public.g02_assert((select count(*) from public.personal_postings where workspace_id=(select workspace_id from public.g02_manage_race_fixture))=2,'metadata race leaves financial history intact');

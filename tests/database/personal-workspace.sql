@@ -120,7 +120,34 @@ select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000004
 select public.g01_assert(public.get_current_shop_id() is null, 'pending invite is not shop access');
 select public.g01_assert(public.activate_invited_memberships(:'legacy_shop_id') = 1, 'valid invitation activates existing membership');
 select public.g01_assert(public.get_current_shop_id() = :'legacy_shop_id'::uuid, 'activated invite resolves shop');
+select public.g01_assert(public.activate_invited_memberships(:'legacy_shop_id') = 0, 'replayed invitation changes no membership');
+select public.g01_assert(public.get_current_shop_id() = :'legacy_shop_id'::uuid, 'replayed invitation keeps current shop');
 reset role;
 select public.g01_assert((select count(*) = 1 from public.shops), 'invitation did not create another shop');
+
+-- Test rejected invitation states without modifying the existing RPC contract.
+create function public.g01_invite_rejected(shop uuid) returns boolean language plpgsql as $$
+begin
+  perform public.activate_invited_memberships(shop);
+  return false;
+exception when no_data_found then return true;
+end; $$;
+update public.shop_members set status='cancelled' where user_id='00000000-0000-4000-8000-000000000004';
+set role authenticated;
+select public.g01_assert(public.g01_invite_rejected(:'legacy_shop_id'), 'cancelled invitation cannot activate');
+select public.g01_assert(public.get_current_shop_id() is null, 'cancelled membership grants no shop access');
+reset role;
+update public.shop_members set status='suspended' where user_id='00000000-0000-4000-8000-000000000004';
+set role authenticated;
+select public.g01_assert(public.g01_invite_rejected(:'legacy_shop_id'), 'suspended membership cannot activate');
+reset role;
+update public.shop_members set status='invited' where user_id='00000000-0000-4000-8000-000000000004';
+update public.shops set status='suspended' where id=:'legacy_shop_id';
+set role authenticated;
+select public.g01_assert(public.g01_invite_rejected(:'legacy_shop_id'), 'invitation cannot activate a suspended shop');
+select public.g01_assert(public.get_current_shop_id() is null, 'suspended shop grants no access');
+reset role;
+select public.g01_assert((select status='invited' from public.shop_members where user_id='00000000-0000-4000-8000-000000000004'), 'failed activation preserves pending invitation');
+update public.shops set status='active' where id=:'legacy_shop_id';
 -- Remove only a synthetic fixture workspace to race its lazy first creation.
 delete from public.personal_workspaces where owner_user_id='00000000-0000-4000-8000-000000000004';

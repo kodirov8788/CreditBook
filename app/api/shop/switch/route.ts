@@ -6,7 +6,7 @@ export async function POST(request: Request) {
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
   const body = await request.json().catch(() => null) as { shopId?: string } | null;
-  if (!body?.shopId || !/^[0-9a-f-]{36}$/i.test(body.shopId)) return badRequest("Do'kon tanlanmadi.");
+  if (!body?.shopId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.shopId)) return badRequest("Do'kon tanlanmadi.");
 
   const { data, error } = await supabase.rpc("switch_current_shop", { p_shop_id: body.shopId });
   if (error) {

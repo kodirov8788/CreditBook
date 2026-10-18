@@ -5,13 +5,14 @@ import type { DashboardCustomer, DashboardStats } from "@/lib/types";
 
 const emptyStats: DashboardStats = { totalOutstanding: 0, collectedThisMonth: 0, overdueAmount: 0, activeCustomers: 0 };
 
-export async function getDashboardData() {
+export async function getDashboardData({ personalFallback = false } = {}) {
   const supabase = await createClient();
   if (!supabase) return { initialCustomers: [], initialStats: emptyStats, initialActivities: [], userEmail: null, shopName: "Mahalla do'koni", liveMode: false, canManageMembers: false, initialError: "Supabase ulanishi sozlanmagan." };
 
   const { data: userData, error: authError } = await supabase.auth.getUser();
   if (authError || !userData.user) redirect("/login");
   const { data: shopId, error: shopError } = await supabase.rpc("get_current_shop_id");
+  if (!shopError && !shopId && personalFallback) redirect("/personal");
   if (shopError || !shopId) {
     return { initialCustomers: [], initialStats: emptyStats, initialActivities: [], userEmail: userData.user.email ?? null, shopName: "Mahalla do'koni", liveMode: true, canManageMembers: false, initialError: "Faol do'kon topilmadi. Qayta kirib ko'ring." };
   }

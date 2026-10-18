@@ -45,6 +45,15 @@ for migration in supabase/migrations/*.sql; do
   sql "$migration"
 done
 sql tests/database/personal-account.sql
+sql tests/database/personal-account-read.sql
+sql tests/database/personal-account-management.sql
+sql tests/database/personal-account-management-concurrent.sql -v caller='Race first' &
+manage_first=$!
+sql tests/database/personal-account-management-concurrent.sql -v caller='Race second' &
+manage_second=$!
+wait "$manage_first"
+wait "$manage_second"
+sql tests/database/personal-account-management-concurrent-check.sql
 sql tests/database/personal-account-concurrent.sql &
 first_caller=$!
 sql tests/database/personal-account-concurrent.sql &
