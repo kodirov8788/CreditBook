@@ -5,5 +5,5 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function Home() {
-  return <Dashboard {...await getDashboardData()} initialView="dashboard" />;
+  return <Dashboard {...await getDashboardData({ personalFallback: true })} initialView="dashboard" />;
 }

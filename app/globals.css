@@ -460,3 +460,24 @@ h2 { margin: 0; font-size: 20px; line-height: 1.15; font-weight: 800; letter-spa
   .stat-value { font-size: 19px; }
   .quick-action { padding-right: 6px; padding-left: 6px; font-size: 11px; }
 }
+
+/* Personal accounts: scoped layout preserves the existing shop interface. */
+.personal-shell { max-width: 1080px; margin: 0 auto; padding: 24px 20px 80px; color: var(--ink); }
+.personal-header, .personal-header nav, .personal-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.personal-header { justify-content: space-between; margin-bottom: 36px; }
+.personal-header a { color: inherit; text-decoration: none; }
+.personal-grid, .personal-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin: 24px 0; }
+.personal-card { border: 1px solid var(--border, #d6d6d6); border-radius: 16px; padding: 24px; margin: 16px 0; background: var(--surface, #fff); }
+.personal-card h2 { font-size: 20px; margin: 0 0 16px; }
+.personal-balance { font-size: clamp(24px, 4vw, 34px); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.personal-balance small { font-size: 14px; }
+.personal-shell fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.personal-shell input, .personal-shell select { width: 100%; min-height: 46px; font-size: 16px; }
+.personal-shell small { display: block; margin-top: 6px; }
+.personal-alert { border-left: 3px solid #b42318; padding: 12px; background: #fff0ed; color: #7a271a; }
+.personal-shell button { min-height: 44px; }
+@media (max-width: 480px) { .personal-shell { padding: 18px 14px 60px; } .personal-card { padding: 18px; } .personal-header nav { gap: 10px; } }
+
+.personal-check { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
+.personal-check input { width: 20px; min-height: 20px; }
+.personal-card summary { cursor: pointer; min-height: 44px; padding: 12px 0; font-weight: 600; }
