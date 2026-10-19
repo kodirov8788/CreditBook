@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Disposable PostgreSQL only: no .env, external DSN, published port, or cloud API.
 cd "$(dirname "$0")/.."
-if [[ $# -gt 1 || ( $# -eq 1 && "${1:-}" != '--shop-read-model' ) ]]; then
-  echo 'Usage: test-personal-account-db.sh [--shop-read-model]' >&2
+if [[ $# -gt 1 || ( $# -eq 1 && "${1:-}" != '--shop-read-model' && "${1:-}" != '--pending-upgrade' ) ]]; then
+  echo 'Usage: test-personal-account-db.sh [--shop-read-model|--pending-upgrade]' >&2
   exit 2
 fi
 container="creditbook-g02-test-$(date +%s)-$$"
@@ -49,6 +49,32 @@ sql() {
 
 sql tests/database/auth-fixture.sql
 sql supabase/schema.sql
+if [[ "${1:-}" == '--pending-upgrade' ]]; then
+  # Rehearse the observed hosted migration boundary, using synthetic rows ONLY.
+  # No hosted connection or migration-history repair is performed.
+  baseline='supabase/migrations/20261017031547_personal_account_opening_foundation.sql'
+  for migration in supabase/migrations/*.sql; do
+    if [[ "$migration" > "$baseline" ]]; then break; fi
+    if [[ "$migration" == 'supabase/migrations/202608200003_atomic_activity_audit.sql' ]]; then
+      sql tests/database/backfill-repair-before.sql
+    fi
+    sql "$migration"
+    if [[ "$migration" == 'supabase/migrations/20260820155850_activity_expense_reminder_backfill.sql' ]]; then
+      sql tests/database/backfill-repair-after.sql
+      sql "$migration"
+      sql tests/database/backfill-repair-after.sql
+    fi
+  done
+  sql tests/database/personal-pilot-before.sql
+  sql tests/database/pending-upgrade-before.sql
+  sql supabase/migrations/20260820155850_activity_expense_reminder_backfill.sql
+  for migration in supabase/migrations/*.sql; do
+    if [[ "$migration" > "$baseline" ]]; then sql "$migration"; fi
+  done
+  sql tests/database/pending-upgrade-after.sql
+  echo 'PASS: eight pending migrations preserve synthetic baseline; historical version aligned locally only.'
+  exit 0
+fi
 if [[ "${1:-}" == '--shop-read-model' ]]; then
   for migration in supabase/migrations/*.sql; do sql "$migration"; done
   sql tests/database/shop-read-model.sql
