@@ -257,7 +257,7 @@ describe("authenticated API contracts", () => {
     expect(response.status).toBe(401);
   });
 
-  it("keeps monthly report rows inside the selected date range", async () => {
+  it("passes the selected date range to the database report (SQL range math tested separately)", async () => {
     const query = (data: unknown[]) => {
       const builder = {
         select: vi.fn().mockReturnThis(),
@@ -283,7 +283,8 @@ describe("authenticated API contracts", () => {
         { id: "expense-in-range", category: "Transport", amount: 10, spent_at: "2026-08-20", vendor: null, note: null, payment_method: "cash", voided_at: null, void_reason: null, created_at: "2026-08-20T08:00:00.000Z" },
       ],
     };
-    const supabase = { from: vi.fn((table: string) => query(datasets[table] ?? [])) };
+    const rpc = vi.fn(() => ({abortSignal: async () => ({data: {shopId: "shop-1", nextCursor: null, expenseCount: 1, report: {from: "2026-08-20", to: "2026-08-21", newCredits: 200, collected: 75, expensesTotal: 10, netCashflow: 65, outstanding: 350, overdueAmount: 0, overdueCount: 0, activeCustomers: 1, monthly: [{month: "2026-08", credits: 200, collected: 75, expenses: 10, netCashflow: 65}], expenses: [{...datasets.expenses[1] as object, id: "00000000-0000-0000-0000-000000000001"}]}}, error: null})}));
+    const supabase = { rpc, from: vi.fn((table: string) => query(datasets[table] ?? [])) };
     authMock.mockResolvedValue({ supabase: supabase as never, user: { id: "user-1" } as never });
 
     const response = await getReport(new Request("http://localhost/api/reports?from=2026-08-20&to=2026-08-21"));
@@ -294,6 +295,8 @@ describe("authenticated API contracts", () => {
     expect(payload.report.collected).toBe(75);
     expect(payload.report.expensesTotal).toBe(10);
     expect(payload.report.monthly).toEqual([{ month: "2026-08", credits: 200, collected: 75, expenses: 10, netCashflow: 65 }]);
+    expect(rpc).toHaveBeenCalledWith("shop_report_page", {p_from: "2026-08-20", p_to: "2026-08-21", p_after: null, p_limit: 1000});
+    expect(supabase.from).not.toHaveBeenCalled();
   });
 
   it("validates expenses before writing", async () => {
