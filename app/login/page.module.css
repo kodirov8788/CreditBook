@@ -1,0 +1,56 @@
+.methods {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 24px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.method {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.method[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.method:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.method:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.check {
+  flex: 0 0 14px;
+  opacity: 0;
+}
+
+.method[aria-pressed="true"] .check {
+  opacity: 1;
+}

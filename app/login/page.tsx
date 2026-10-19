@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient, hasSupabaseEnv } from "@/lib/supabase/browser";
 import { loginDestination } from "@/lib/login-destination";
+import styles from "./page.module.css";
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -50,9 +51,9 @@ function LoginForm() {
   return <main className="login-shell"><div className="login-card">
     <div className="brand" style={{ padding: 0, color: "var(--ink)" }}><div className="brand-mark">C</div><div className="brand-name">CreditBook</div></div>
     <h1>Xush kelibsiz.</h1><p className="muted" style={{ lineHeight: 1.5 }}>Hisobingizga kiring.</p>
-    <div role="group" aria-label="Kirish usuli">
-      <button type="button" className="button" aria-pressed={method === "password"} disabled={loading} onClick={() => { setMethod("password"); setMessage(""); }}>Parol</button>
-      <button type="button" className="button" aria-pressed={method === "link"} disabled={loading} onClick={() => { setMethod("link"); setPassword(""); setMessage(""); }}>Email havolasi</button>
+    <div className={styles.methods} role="group" aria-label="Kirish usuli">
+      <button type="button" className={styles.method} aria-pressed={method === "password"} disabled={loading} onClick={() => { setMethod("password"); setMessage(""); }}><span className={styles.check} aria-hidden="true">✓</span><span>Parol</span></button>
+      <button type="button" className={styles.method} aria-pressed={method === "link"} disabled={loading} onClick={() => { setMethod("link"); setPassword(""); setMessage(""); }}><span className={styles.check} aria-hidden="true">✓</span><span>Email havolasi</span></button>
     </div>
     <form onSubmit={handleLogin} aria-busy={loading}>
       <div className="field"><label htmlFor="email">Email</label><input id="email" type="email" autoComplete="username" required disabled={loading} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="siz@example.com" /></div>
