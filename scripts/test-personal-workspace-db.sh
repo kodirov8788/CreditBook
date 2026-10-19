@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 container="creditbook-g01-test-$(date +%s)-$$"
 # Pin the tested upstream image; update deliberately alongside test evidence.
 image='postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24'
+pilot_migration='supabase/migrations/20261019055603_personal_pilot_access.sql'
 created=false
 cleanup() {
   if [ "$created" = true ]; then
@@ -28,6 +29,9 @@ sql() {
 sql tests/database/auth-fixture.sql
 sql supabase/schema.sql
 for migration in supabase/migrations/*.sql; do
+  # Historical foundation assertions run against their pre-pilot contract;
+  # then exercise the pilot migration and final security state below.
+  if [[ "$migration" == "$pilot_migration" ]]; then break; fi
   if [[ "$migration" == *20261017011017_personal_workspace_foundation.sql ]]; then
     sql tests/database/personal-workspace-before.sql
   fi
@@ -41,5 +45,11 @@ second_caller=$!
 wait "$first_caller"
 wait "$second_caller"
 sql tests/database/personal-workspace-concurrent-check.sql
+sql tests/database/personal-pilot-before.sql
+for migration in supabase/migrations/*.sql; do
+  if [[ "$migration" < "$pilot_migration" ]]; then continue; fi
+  sql "$migration"
+done
+sql tests/database/personal-pilot.sql
 docker --context colima image inspect "$image" --format '{{json .RepoDigests}}'
 echo 'PASS: PostgreSQL migration/RLS tests (not full Supabase E2E).'

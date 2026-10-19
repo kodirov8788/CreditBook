@@ -19,7 +19,16 @@ revoke all on function public.is_shop_member(uuid) from public, anon, authentica
 grant execute on function public.is_shop_member(uuid) to authenticated;
 
 revoke all on function public.handle_new_user() from public, anon, authenticated;
-revoke all on function public.rls_auto_enable() from public, anon, authenticated;
+-- Hosted platform installations may provide this event-trigger function; the
+-- real local CLI stack does not. Preserve hardening where present without
+-- making fresh local installs depend on a fake platform-function stub.
+do $$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    execute 'revoke all on function public.rls_auto_enable() from public, anon, authenticated';
+  end if;
+end;
+$$;
 revoke all on function public.set_updated_at() from public, anon, authenticated;
 
 alter function public.set_updated_at() set search_path = pg_catalog;

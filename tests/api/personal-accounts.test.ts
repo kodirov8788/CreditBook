@@ -66,3 +66,4 @@ describe("exact display and local dates", () => {
     expect(localDate("Pacific/Kiritimati")).toBe("2026-01-01"); vi.useRealTimers();
   });
 });
+vi.mock("@/lib/api/personal-access", () => ({ getPersonalAccess: vi.fn().mockResolvedValue("allowed") }));

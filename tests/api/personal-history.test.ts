@@ -43,3 +43,4 @@ describe("bounded keyset history",()=>{
   client([{id:rowId(1),amount_minor:9007199254740992}]);expect((await GET(new Request("http://localhost/history"),context)).status).toBe(500);
  });
 });
+vi.mock("@/lib/api/personal-access", () => ({ getPersonalAccess: vi.fn().mockResolvedValue("allowed") }));

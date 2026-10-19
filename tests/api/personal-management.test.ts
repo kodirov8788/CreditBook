@@ -41,3 +41,4 @@ describe("account management and statements",()=>{
   expect((await response.json()).postings[0].amount_minor).toBe("100000000000000");expect(history.eq).toHaveBeenCalledWith("account_id",id);
  });
 });
+vi.mock("@/lib/api/personal-access", () => ({ getPersonalAccess: vi.fn().mockResolvedValue("allowed") }));

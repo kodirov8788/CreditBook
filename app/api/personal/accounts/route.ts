@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedClient } from "@/lib/api/auth";
+import { getPersonalAccess, personalAccessResponse } from "@/lib/api/personal-access";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/api/response";
 import { readJsonBody } from "@/lib/api/json-body";
 
@@ -9,6 +10,8 @@ const keyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9
 export async function GET(request: Request) {
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
+  const access = await getPersonalAccess(supabase, user);
+  if (access !== "allowed") return personalAccessResponse(access);
   const raw = new URL(request.url).searchParams.get("offset") ?? "0";
   if (!/^\d{1,6}$/.test(raw) || Number(raw) > 100000) return badRequest("Sahifa noto‘g‘ri.");
   const { data, error } = await supabase.rpc("get_personal_accounts", { p_offset: Number(raw) });
@@ -20,6 +23,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
+  const access = await getPersonalAccess(supabase, user);
+  if (access !== "allowed") return personalAccessResponse(access);
   let body;
   try { body = await readJsonBody(request); } catch { return badRequest("So‘rov noto‘g‘ri yoki juda katta."); }
   if (!body || typeof body !== "object" || Array.isArray(body)) return badRequest("So‘rov noto‘g‘ri.");

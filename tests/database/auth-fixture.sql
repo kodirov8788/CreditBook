@@ -9,6 +9,7 @@ create table auth.users (
   email text,
   raw_user_meta_data jsonb default '{}'::jsonb,
   banned_until timestamptz,
+  deleted_at timestamptz,
   is_anonymous boolean default false
 );
 create function auth.uid() returns uuid language sql stable as $$
