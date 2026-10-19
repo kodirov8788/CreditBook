@@ -1,0 +1,163 @@
+.page {
+  min-width: 0;
+}
+
+.listControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 20px 0 16px;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--green-dark);
+  font-weight: 700;
+}
+
+.heading {
+  margin: 12px 0 20px;
+}
+
+.heading h1 {
+  text-wrap: balance;
+}
+
+.heading p,
+.empty p {
+  max-width: 52ch;
+  color: var(--muted);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin: 0;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.filter input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  flex: 0 0 20px;
+  margin: 0;
+  accent-color: var(--green);
+}
+
+.listCard {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.loading,
+.empty {
+  padding: 24px;
+}
+
+.loading {
+  margin: 0;
+  color: var(--muted);
+}
+
+.error {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.error p {
+  margin: 0;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.error button,
+.listCard > button {
+  justify-self: start;
+}
+
+.list {
+  display: grid;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-weight: 700;
+}
+
+.status {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.empty {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+.empty h2,
+.empty p {
+  margin: 0;
+}
+
+.listCard > button {
+  margin: 16px;
+}
+
+@media (max-width: 480px) {
+  .loading,
+  .empty {
+    padding: 18px;
+  }
+
+  .row {
+    padding: 14px;
+  }
+}

@@ -136,6 +136,7 @@ function PersonalBookForOwner({ userId, hasShop }: { userId: string; hasShop: bo
   return <main className="personal-shell">
     <header className="personal-header"><Link href="/personal" className="brand-name">CreditBook</Link><nav aria-label="Hisob turi"><strong>Shaxsiy</strong>{hasShop && <Link href="/dashboard">Do‘kon</Link>}<button className="button" disabled={busy} onClick={() => void signOut()}>Chiqish</button></nav></header>
     <h1>Shaxsiy hisob</h1><p className="muted">Bitta hisob · JPY · Yaponiya vaqti</p>
+    <p><Link href="/personal/categories" prefetch={false}>Toifalar</Link></p>
     {error && <p role="alert" className="personal-alert">{error}</p>}
     {!view && <section className="personal-card" role="status" aria-busy="true">Hisob yuklanmoqda…</section>}
     <button className="button" disabled={busy} onClick={() => void load().catch(() => setError("Hisob olinmadi."))}>Yangilash</button>
