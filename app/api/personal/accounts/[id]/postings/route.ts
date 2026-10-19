@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedClient } from "@/lib/api/auth";
+import { getPersonalAccess, personalAccessResponse } from "@/lib/api/personal-access";
 import { badRequest, serverError, unauthorized } from "@/lib/api/response";
 import { decodeHistoryCursor, encodeHistoryCursor, type HistoryCursor } from "@/lib/personal-finance/history-cursor";
 
 export async function GET(request: Request, context: {params:Promise<{id:string}>}) {
   const {supabase,user}=await getAuthenticatedClient(request);
   if(!supabase||!user)return unauthorized();
+  const access = await getPersonalAccess(supabase, user);
+  if (access !== "allowed") return personalAccessResponse(access);
   const {id}=await context.params;
   const params=new URL(request.url).searchParams;
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)||params.has("offset"))return badRequest("Hisob yoki tarix belgisi noto‘g‘ri.");

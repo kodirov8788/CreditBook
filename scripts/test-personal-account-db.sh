@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.."
 container="creditbook-g02-test-$(date +%s)-$$"
 # Pin the tested upstream image; change deliberately alongside the evidence.
 image='postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24'
+pilot_migration='supabase/migrations/20261019055603_personal_pilot_access.sql'
 created=false
 
 cleanup() {
@@ -42,6 +43,9 @@ sql() {
 sql tests/database/auth-fixture.sql
 sql supabase/schema.sql
 for migration in supabase/migrations/*.sql; do
+  # Verify legacy account behavior first, then pilot revocation and RLS on the
+  # same preserved records. Do not weaken the final-state pilot assertions.
+  if [[ "$migration" == "$pilot_migration" ]]; then break; fi
   sql "$migration"
 done
 sql tests/database/personal-account.sql
@@ -67,5 +71,11 @@ second_caller=$!
 wait "$first_caller"
 wait "$second_caller"
 sql tests/database/personal-account-concurrent-check.sql
+sql tests/database/personal-pilot-before.sql
+for migration in supabase/migrations/*.sql; do
+  if [[ "$migration" < "$pilot_migration" ]]; then continue; fi
+  sql "$migration"
+done
+sql tests/database/personal-pilot.sql
 docker --context colima image inspect "$image" --format '{{json .RepoDigests}}'
 echo 'PASS: personal-account migration/RLS/RPC tests (not full Supabase E2E).'

@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedClient } from "@/lib/api/auth";
+import { getPersonalAccess, personalAccessResponse } from "@/lib/api/personal-access";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/api/response";
 import { readJsonBody } from "@/lib/api/json-body";
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
+  const access = await getPersonalAccess(supabase, user);
+  if (access !== "allowed") return personalAccessResponse(access);
   const { id } = await context.params;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) return badRequest("Hisob noto‘g‘ri.");
   let body;

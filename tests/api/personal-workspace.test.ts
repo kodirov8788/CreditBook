@@ -172,3 +172,4 @@ describe("personal workspace API", () => {
     await expect(arrayResponse.json()).resolves.toEqual({ workspace: publicWorkspace });
   });
 });
+vi.mock("@/lib/api/personal-access", () => ({ getPersonalAccess: vi.fn().mockResolvedValue("allowed") }));

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedClient } from "@/lib/api/auth";
+import { getPersonalAccess, personalAccessResponse } from "@/lib/api/personal-access";
 import { badRequest, forbidden, serverError, unauthorized } from "@/lib/api/response";
 
 const MAX_BODY_BYTES = 1024;
@@ -79,6 +80,8 @@ async function hasEmptyObjectBody(request: Request) {
 export async function GET(request: Request) {
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
+  const access = await getPersonalAccess(supabase, user);
+  if (access !== "allowed") return personalAccessResponse(access);
 
   const { data, error } = await supabase
     .from("personal_workspaces")
@@ -96,6 +99,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
+  const access = await getPersonalAccess(supabase, user);
+  if (access !== "allowed") return personalAccessResponse(access);
 
   if (!await hasEmptyObjectBody(request)) {
     return badRequest("Bu endpoint ma’lumot qabul qilmaydi.");
