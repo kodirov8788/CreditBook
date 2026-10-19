@@ -35,6 +35,12 @@ export async function POST(request: Request) {
   const { data, error } = await supabase.rpc("create_personal_account", { p_command: input.command, p_client_key: input.clientKey });
   if (error) {
     if (error.code === "42501") return forbidden();
+    if (error.code === "PT409") {
+      const legacy = error.message === "LEGACY_SETUP_REQUIRED";
+      return NextResponse.json({ code: legacy ? "LEGACY_SETUP_REQUIRED" : "BOOK_EXISTS",
+        error: legacy ? "Eski hisoblar bor. Alohida sozlash kerak." : "Shaxsiy hisob allaqachon ochilgan." },
+      { status: 409, headers: { "Cache-Control": "private, no-store" } });
+    }
     if (error.code === "22023") return NextResponse.json({ code: "22023", error: "Nom, summa, valyuta va sanani tekshiring." }, { status: 400 });
     if (error.code === "23505") return NextResponse.json({ error: "Bu so‘rov avval boshqa ma’lumot bilan yuborilgan." }, { status: 409 });
     return serverError();

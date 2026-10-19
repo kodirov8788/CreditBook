@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getPersonalAccess } from "@/lib/api/personal-access";
-import PersonalAccounts from "@/components/personal/accounts";
+import PersonalBook from "@/components/personal/book";
 
 export const dynamic = "force-dynamic";
 
@@ -21,5 +21,5 @@ export default async function PersonalPage() {
     </section></main>;
   }
   const { data: shops, error } = await supabase.rpc("list_user_shops");
-  return <PersonalAccounts userId={user.id} hasShop={!error && Boolean(shops?.length)} />;
+  return <PersonalBook userId={user.id} hasShop={!error && Boolean(shops?.length)} />;
 }

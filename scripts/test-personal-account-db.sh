@@ -7,6 +7,7 @@ container="creditbook-g02-test-$(date +%s)-$$"
 # Pin the tested upstream image; change deliberately alongside the evidence.
 image='postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24'
 pilot_migration='supabase/migrations/20261019055603_personal_pilot_access.sql'
+book_migration='supabase/migrations/20261019063444_personal_single_book.sql'
 created=false
 
 cleanup() {
@@ -22,7 +23,9 @@ created=true
 
 ready=false
 for attempt in {1..30}; do
-  if docker --context colima exec "$container" pg_isready -U postgres >/dev/null 2>&1; then
+  # The bootstrap server accepts Unix sockets before restarting. Its TCP port
+  # stays disabled; wait for the final server rather than racing that restart.
+  if docker --context colima exec "$container" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then
     ready=true
     break
   fi
@@ -74,8 +77,22 @@ sql tests/database/personal-account-concurrent-check.sql
 sql tests/database/personal-pilot-before.sql
 for migration in supabase/migrations/*.sql; do
   if [[ "$migration" < "$pilot_migration" ]]; then continue; fi
+  if [[ "$migration" == "$book_migration" ]]; then
+    sql tests/database/personal-pilot.sql
+    sql tests/database/personal-book-before.sql
+  fi
   sql "$migration"
 done
-sql tests/database/personal-pilot.sql
+sql tests/database/personal-book.sql
+for different_keys in false true; do
+  sql tests/database/personal-book-concurrent.sql -v different_keys="$different_keys" &
+  book_first=$!
+  sql tests/database/personal-book-concurrent.sql -v different_keys="$different_keys" &
+  book_second=$!
+  sql tests/database/personal-book-concurrent-observe.sql
+  wait "$book_first"
+  wait "$book_second"
+done
+sql tests/database/personal-book-concurrent-check.sql
 docker --context colima image inspect "$image" --format '{{json .RepoDigests}}'
 echo 'PASS: personal-account migration/RLS/RPC tests (not full Supabase E2E).'

@@ -1,18 +1,21 @@
 # Personal V1 continuation checkpoint
 
-Updated: 2026-10-19 (Asia/Tokyo), real local G01 Auth/REST/HTTP acceptance. No external writes.
+Updated: 2026-10-19 (Asia/Tokyo), G02 publication approved; production readiness review.
+This checkpoint supersedes the earlier G01 pre-commit handoff.
 
 ## Current state
 - Roadmap #87 / G01 #88; historical FX #108.
-- Actual checkout: /private/tmp/creditbook-g01; G01 commit branch
-  codex/issue-88-pilot-access, based on codex/personal-account-journey.
-- Baseline fbc15d1d70b55b62adae9412def0459d6c5f5eee; preserve the dirty local
-  application guard and DB slice. Draft stacked PRs #104–#107 were not changed.
+- Actual checkout: /private/tmp/creditbook-g01; current local working branch
+  codex/issue-89-single-book, based on G01 commit 42f7ac0.
+- G01 is committed and pushed on codex/issue-88-pilot-access in draft PR #109,
+  stacked on #107. Do not reapply or recommit the original 23-file G01 batch.
+- Draft stacked PRs #104–#107 remain unchanged. G02 changes are local/uncommitted.
 - User explicitly approved this local allowlist/RLS implementation and tests;
   production and existing shop data must remain untouched. Fresh-action gates
   still apply to concrete external mutations.
-- Latest user scope explicitly authorizes real local Supabase login/HTTP/REST,
-  permissions and cross-shop tests; production remains out of scope.
+- Latest user explicitly requests push and production merge. Publish the bounded
+  reviewed G02 slice; do not bypass readiness, authoritative count-only preflight,
+  backup/recovery or separately required exact schema/data approval gates.
 
 ## Local implementation
 The previous application slice guards the personal page and all six HTTP handlers.
@@ -39,7 +42,7 @@ subject after ban/soft deletion, anonymous/missing identity, workspace suspensio
 exact writes/idempotency, preserved shop access/cross-shop boundaries/invites and
 the real SQL auth insert trigger. Only disposable synthetic records are mutated.
 
-## Verified in this run
+## Historical G01 verification (before commit 42f7ac0)
 - `node scripts/test-personal-supabase-http.mjs <disposable-local-workdir>`:
   **122 assertions passed**, final process exit 0 and scoped cleanup succeeded.
   Real GoTrue signup/password login, signed ordinary/anonymous JWTs, PostgREST,
@@ -88,8 +91,8 @@ Production contract/configuration was not checked or changed in this run. The mi
 denying everyone until an approved DB-admin operation enrols the intended verified
 Auth UUID. Empty non-pilot workspaces are hidden, not deleted. Do not deploy the
 application alone, mark G01 fully accepted or silently alter signup/shop policy.
-No commit, push, PR/issue mutation, merge, production migration/configuration/data
-change or deployment occurred.
+No commit/push/PR mutation occurred during those tests. Subsequent user-approved
+publication produced commit 42f7ac0 and draft #109; no merge or production action.
 
 ## Files touched in the previous database slice
 - supabase/migrations/20261019055603_personal_pilot_access.sql (new)
@@ -135,24 +138,37 @@ Local synthetic logs:
   only this checkpoint was updated. git diff --check passed again.
 - Existing sanitized HTTP evidence was read back: 122 passed, exit-success
   result and scoped cleanup recorded. Tests were not rerun without code changes.
-- Proposed integration: preserve the current dirty worktree, place this exact
-  G01 batch on a separate branch based on fbc15d1, and retain #107 as the stacked
-  review base. Obtain fresh explicit approval before committing; push/PR and
-  production remain separately gated. No branch was created in this review.
-- Fresh user approval received on 2026-10-19: commit this exact 23-file G01
-  guard/RLS/local-test batch on a separate local branch. No push, PR mutation,
-  merge, deployment or hosted migration is authorized by this approval.
-  Verify the resulting commit and clean status before reporting success.
+- Completed with separate explicit user approvals: G01 commit 42f7ac0, push and
+  draft PR #109 targeting codex/personal-account-journey (#107). These approvals
+  do not authorize another commit/push or any merge/production operation.
 
 1. Real local Auth/PostgREST and production-mode Next HTTP/page/cache coverage is
    complete for the documented 122-check matrix; do not repeat the whole setup
    without a source change or missing evidence. Interactive browser/mobile flows
    and external provider/email acceptance remain separately scoped checks.
-2. Review the complete uncommitted G01 application/DB/compatibility/test diff
-   against draft PRs #104–#107 and prepare a bounded integration/release plan.
-3. Preserve the draft stack/local changes; assess coupled application+DB rollout
-   and prepare exact commit/push/PR and production preflight/backup approvals
-   only when the remaining acceptance gates are addressed.
+2. Independent review of committed #109 found no current guard/RLS bypass, but
+   found two P2 issues: a caller-supplied fresh HTTP-test target is not proven
+   runner-owned, and stale handoff wording. The docs are corrected locally;
+   the HTTP-runner ownership issue remains a blocker. Do NOT run that script.
+3. User approved local G02 work after review. New book mapping/trigger, guarded
+   book API and single-book JPY/Tokyo UI are implemented locally. Preserve all
+   dirty G02 changes; see docs/personal-single-book.md for files and proof.
+4. G02 API/pure suite: 271 passed; typecheck/lint passed; final local Next build
+   passed after an initial font-fetch permission retry. Account SQL harness:
+   295 PASS assertions, including two observed actual lock-contention rounds;
+   workspace SQL harness: 181 PASS assertions. Fixed bootstrap readiness race
+   in both runners and reran. Independent G02 review found a restored terminal
+   conflict retry trap; fixed locally and covered by six additional cases.
+   Final bounded source re-review found no remaining G02 P1/P2; the manager
+   verified completed runner exit codes/counts, not just the reviewer's report.
+5. Next: fix the G01 HTTP-runner ownership issue before real HTTP reruns, adapt
+   HTTP/E2E scenarios to the book UI, then verify G02 real HTTP/mobile acceptance.
+   Explicit legacy setup and G03 posting/monthly reports remain incomplete.
+   G02 commit/push and stacked draft PR publication are now user-approved.
+   Production merge was requested, but remains gated by unresolved real HTTP /
+   mobile proof and database rollout prerequisites. No schema/data operation or
+   merge has been performed under this publication step.
 
-Resume from this dirty worktree. No concurrent writer should edit this slice.
+Resume from the G02 dirty worktree, NOT by repeating the already-published G01
+commit. No concurrent writer should edit this slice.
 No secrets, real account identity or raw private transcripts belong here.

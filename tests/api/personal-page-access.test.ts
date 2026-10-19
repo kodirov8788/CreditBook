@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error("redirect:" + path); } }));
-vi.mock("@/components/personal/accounts", () => ({ default: () => React.createElement("div", null, "personal-account-fixture") }));
+vi.mock("@/components/personal/book", () => ({ default: () => React.createElement("div", null, "personal-account-fixture") }));
 const create = vi.mocked(createClient), rpc = vi.fn(), getUser = vi.fn();
 afterEach(() => vi.unstubAllGlobals());
 beforeEach(() => {
