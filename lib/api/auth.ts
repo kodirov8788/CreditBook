@@ -1,21 +1,25 @@
 import { createClient } from "@/lib/supabase/server";
-import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
+import { createSupabaseDataClient, type DataClient } from "@/lib/data/client";
 import { forbidden, unauthorized } from "@/lib/api/response";
 
 export async function getAuthenticatedClient(request?: Request) {
-  const supabase = await createClient(request);
-  if (!supabase) return { supabase: null, user: null };
+  const authClient = await createClient(request);
+  if (!authClient) return { supabase: null, user: null };
 
   const authorization = request?.headers.get("authorization");
   const bearerToken = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
-  const { data: { user } } = bearerToken
-    ? await supabase.auth.getUser(bearerToken)
-    : await supabase.auth.getUser();
-  return { supabase, user };
+  const { data: { user }, error } = bearerToken
+    ? await authClient.auth.getUser(bearerToken)
+    : await authClient.auth.getUser();
+  if (error || !user) return { supabase: null, user: null };
+
+  // Retain the legacy field name while separating identity from data access.
+  return { supabase: createSupabaseDataClient(authClient), user };
 }
 
 export async function requireShopPermission(
-  supabase: SupabaseClient | null,
+  supabase: DataClient | null,
   user: User | null,
   permission: string,
 ) {

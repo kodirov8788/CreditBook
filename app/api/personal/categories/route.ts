@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DataClient } from "@/lib/data/client";
 import { getAuthenticatedClient } from "@/lib/api/auth";
 import { readJsonBody } from "@/lib/api/json-body";
 import { getPersonalAccess, personalAccessResponse } from "@/lib/api/personal-access";
@@ -49,7 +49,7 @@ function validateListQuery(request: Request) {
 }
 
 async function getAllowedClient(request: Request): Promise<
-  { ok: false; response: NextResponse } | { ok: true; supabase: SupabaseClient }
+  { ok: false; response: NextResponse } | { ok: true; supabase: DataClient }
 > {
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return { ok: false, response: unauthorized() };

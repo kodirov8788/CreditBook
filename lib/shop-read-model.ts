@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DataClient } from "@/lib/data/client";
 
 type RecordValue = Record<string, unknown>;
 export type ShopCustomerSummary = {
@@ -70,7 +70,7 @@ function report(value: unknown): ShopReport {
  * Global totals come from SQL, never from a page or nested PostgREST relations.
  */
 async function collect<T extends {id: string}>(
-  supabase: SupabaseClient, shopId: string, rpc: string, args: RecordValue,
+  supabase: DataClient, shopId: string, rpc: string, args: RecordValue,
   decode: (value: RecordValue) => {items: T[]; total: number; metadata: unknown},
 ) {
   const signal = AbortSignal.timeout(20_000);
@@ -106,7 +106,7 @@ async function collect<T extends {id: string}>(
   }
 }
 
-export async function readShopDashboard(supabase: SupabaseClient, shopId: string) {
+export async function readShopDashboard(supabase: DataClient, shopId: string) {
   let resultTotals: ShopDashboardTotals | undefined;
   const result = await collect(supabase, shopId, "shop_dashboard_page", {}, page => {
     resultTotals = totals(page.totals);
@@ -121,7 +121,7 @@ export function validReportDate(value: string | null) {
   return value === null || (/^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value);
 }
 
-export async function readShopReport(supabase: SupabaseClient, shopId: string, from: string | null, to: string | null) {
+export async function readShopReport(supabase: DataClient, shopId: string, from: string | null, to: string | null) {
   let resultReport: ShopReport | undefined;
   const result = await collect(supabase, shopId, "shop_report_page", {p_from: from, p_to: to}, page => {
     resultReport = report(page.report);
