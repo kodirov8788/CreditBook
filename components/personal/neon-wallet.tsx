@@ -111,6 +111,9 @@ export default function NeonWallet({ initialView = "home" }: { initialView?: "ho
       if (turn !== generation.current || active.signal.aborted) return;
       if (!session.ok || (owner.current !== undefined && owner.current !== session.user.id)) {
         clearPrivate();
+        // A verified boundary can discard the old read identity. Write intents
+        // retain their captured owner and are never rebound to the new login.
+        if (session.ok || session.code === "OWNER_CHANGED") owner.current = undefined;
         setMessage(session.ok || session.code === "OWNER_CHANGED" ? "Akkaunt boshqa tabda almashdi. Qoralama saqlanmadi. Qayta kiring." : "Hisobga qayta kiring.");
         return;
       }
@@ -170,6 +173,7 @@ export default function NeonWallet({ initialView = "home" }: { initialView?: "ho
       if (reason === "session") clearPrivate();
       // Freeze the original owner. Never rebind a pending write to a new login.
       if (mutating.current) { invalidated.current = true; refreshQueue.cancel(); generation.current++; clearPrivate(); return; }
+      if (reason === "session") owner.current = undefined;
       void load(reason);
     }, { observeBlur: true });
     return () => { mounted.current = false; stop(); generationRef.current++; refreshQueue.cancel(); controller.current?.abort(); pageController.current?.abort(); categoryController.current?.abort(); };

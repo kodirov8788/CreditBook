@@ -71,8 +71,8 @@ function readStatement(selectedMonth: string, cursor: LedgerCursor | undefined, 
       'balance_minor',coalesce((select sum(p.amount_minor)::text from creditbook_personal_data.personal_postings p join book b on b.workspace_id=p.workspace_id and b.account_id=p.account_id),'0'),
       'income_minor',coalesce((select sum(amount_minor) filter(where kind='income')::text from monthly),'0'),
       'expense_minor',coalesce((select sum(amount_minor) filter(where kind='expense')::text from monthly),'0')),
-      'entries',coalesce((select jsonb_agg(h) from history h),'[]'::jsonb)
-      ${snapshot ? ", 'book',creditbook_personal_data.get_personal_book(), 'categories',coalesce((select jsonb_agg(c) from (select id,name,status,version from creditbook_personal_data.personal_categories order by created_at,id limit 101) c),'[]'::jsonb)" : ""}) as result`,
+      'entries',coalesce((select jsonb_agg(h order by h.effective_date desc,h.recorded_at desc,h.id desc) from history h),'[]'::jsonb)
+      ${snapshot ? ", 'book',creditbook_personal_data.get_personal_book(), 'categories',coalesce((select jsonb_agg(to_jsonb(c)-'created_at' order by c.created_at,c.id) from (select id,name,status,version,created_at from creditbook_personal_data.personal_categories order by created_at,id limit 101) c),'[]'::jsonb)" : ""}) as result`,
     [`${selectedMonth}-01`, cursor?.effectiveDate ?? null, cursor?.recordedAt ?? null, cursor?.id ?? null]);
 }
 

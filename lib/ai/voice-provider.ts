@@ -63,7 +63,8 @@ export function validateVoiceDraft(value: unknown, input: VoiceDraftRequest, cat
     clarification: draft.clarification || (input.mode === "receipt" ? receiptProblem(draft.entries, draft.receipt) : null) || (draft.entries.length === 0 || draft.entries.some(e => e.amountMinor === null || e.currencyCode === null || e.categoryId === null) ? "Noaniq maydonlarni tekshirib, to‘ldiring." : null) };
 }
 
-export type VoiceInference = Readonly<{ draft: VoiceDraft | null; cost: string | null }>;
+export type VoiceProviderFailure = "AI_PROVIDER_AUTH" | "AI_PROVIDER_BUDGET" | "AI_PROVIDER_BUSY" | "AI_UNAVAILABLE";
+export type VoiceInference = Readonly<{ draft: VoiceDraft | null; cost: string | null; failure?: VoiceProviderFailure }>;
 export async function inferVoice(input: VoiceDraftRequest, categories: readonly VoiceCategory[], apiKey: string, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<VoiceInference> {
   if (!apiKey || categories.length > 100 || categories.some(c => c.name.length > 80)) throw new Error("AI_NOT_CONFIGURED");
   const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -103,7 +104,7 @@ export async function inferVoice(input: VoiceDraftRequest, categories: readonly 
   if (!reply.ok) {
     // Log only the transport status: never the response body, headers, input or key.
     console.warn("creditbook_voice_upstream_failed", { status: reply.status });
-    return { draft: null, cost: null };
+    return { draft: null, cost: null, failure: reply.status === 401 || reply.status === 403 ? "AI_PROVIDER_AUTH" : reply.status === 402 ? "AI_PROVIDER_BUDGET" : reply.status === 429 ? "AI_PROVIDER_BUSY" : "AI_UNAVAILABLE" };
   }
   const reader = reply.body?.getReader();
   if (!reader) return { draft: null, cost: null };

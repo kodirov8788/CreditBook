@@ -54,7 +54,7 @@ export function createNeonVoiceHandler(config: LocalNeonConfig, dependencies: De
       const result = await dependencies.infer(input, categories, request.signal);
       await reservation.budget.finish(input.requestId, result.cost);
       reservation = undefined;
-      if (result.cost === null) return fail(503, "AI_UNAVAILABLE");
+      if (result.cost === null) return fail(503, result.failure && ["AI_PROVIDER_AUTH", "AI_PROVIDER_BUDGET", "AI_PROVIDER_BUSY"].includes(result.failure) ? result.failure : "AI_UNAVAILABLE");
       if (!result.draft) return fail(502, "AI_INVALID_OUTPUT");
       // Recheck the actual cookie after inference; a stale UI also discards responses by owner.
       const fresh = await dependencies.verify(request.signal);

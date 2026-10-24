@@ -61,6 +61,17 @@ export function parseVoiceDraftResponse(value: unknown, ownerId: string, request
   return value as VoiceDraftResponse;
 }
 
+/** Redacted, actionable errors; provider credentials never become user-session failures. */
+export function voiceFailureMessage(code: unknown): string {
+  if (code === "AI_PROVIDER_AUTH" || code === "AI_NOT_CONFIGURED") return "AI xizmati kaliti sozlanmagan yoki muddati tugagan. Qo‘lda kiritish ishlaydi; xizmat sozlamasini tekshirish kerak.";
+  if (code === "AI_PROVIDER_BUDGET") return "AI provayderi balansi yoki limiti yetarli emas. Qo‘lda kiritish mumkin.";
+  if (code === "AI_BUDGET_EXHAUSTED") return "AI limiti tugadi. Qo‘lda kiritish mumkin.";
+  if (code === "AI_BUSY" || code === "AI_PROVIDER_BUSY") return "AI band. Keyinroq urinib ko‘ring yoki qo‘lda kiriting.";
+  if (code === "AI_REQUEST_REPLAY") return "So‘rov qayta ishlanmoqda. Shu tahlilni qayta yuboring.";
+  if (code === "AI_UNAVAILABLE") return "AI xizmatiga ulanib bo‘lmadi. Keyinroq urinib ko‘ring yoki qo‘lda kiriting.";
+  return "Tahlil natijasi ishonchli emas. Qayta urinib ko‘ring.";
+}
+
 export function voiceRequestIsCurrent(active: Readonly<{ id: string; ownerId: string; controller: AbortController }> | null, requestId: string, ownerId: string, hasConsent: boolean): boolean {
   return hasConsent && active?.id === requestId && active.ownerId === ownerId && !active.controller.signal.aborted;
 }
@@ -171,7 +182,10 @@ export function VoiceEntry({ ownerId, disabled, defaultKind, categories, onConfi
       if (response.status === 401 || response.status === 403 || (value && typeof value === "object" && (value as { code?: unknown }).code === "OWNER_CHANGED")) { onAuthFailure(); return; }
       const parsed = response.ok ? parseVoiceDraftResponse(value, ownerId, requestId) : null;
       const draft = requestSource === "receipt" && !parsed?.draft.receipt ? null : purpose === "category" && (parsed?.draft.entries.length !== 0 || !(parsed?.draft.categoryName === null || typeof parsed?.draft.categoryName === "string" && !categoryNameProblem(parsed.draft.categoryName, []))) ? null : parsed;
-      if (!draft) { const code = value && typeof value === "object" ? (value as { code?: unknown }).code : undefined; onMessage(code === "AI_BUDGET_EXHAUSTED" ? "AI limiti tugadi." : code === "AI_BUSY" ? "AI band. Keyinroq urinib ko‘ring." : code === "AI_REQUEST_REPLAY" ? "So‘rov qayta ishlanmoqda. Shu tahlilni qayta yuboring." : "Tahlil natijasi ishonchli emas. Qayta urinib ko‘ring."); return; }
+      if (!draft) {
+        const code = value && typeof value === "object" ? (value as { code?: unknown }).code : undefined;
+        onMessage(voiceFailureMessage(code)); return;
+      }
       setCategoryName(draft.draft.categoryName ?? null);
       setAudio(null); setTranscript(draft.draft.transcript); setClarification(draft.draft.clarification); setDraftSource(requestSource); setCategoryContextLimited(Boolean((draft as VoiceDraftResponse & { categoryContextLimited?: boolean }).categoryContextLimited));
       setImage(null); setReceipt(draft.draft.receipt ?? null);
