@@ -8,5 +8,8 @@ export default defineConfig({
   test: {
     environment: "node",
     clearMocks: true,
+    // Transform the pinned SDK so next/headers uses the per-request test mock.
+    // Native Node ESM cannot resolve its extensionless Next framework import.
+    server: { deps: { inline: [/@neondatabase\/auth/] } },
   },
 });

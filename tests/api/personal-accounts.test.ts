@@ -28,6 +28,11 @@ describe("personal account HTTP boundary", () => {
     const response = await POST(request({ clientKey, command }));
     expect(response.status).toBe(200); expect((await response.json()).accountId).toBe("original");
   });
+  it.each(["BOOK_EXISTS", "LEGACY_SETUP_REQUIRED"])("maps guarded legacy creation conflict %s", async message => {
+    rpc.mockResolvedValue({ data: null, error: { code: "PT409", message } });
+    const response = await POST(request({ clientKey, command }));
+    expect(response.status).toBe(409); expect((await response.json()).code).toBe(message);
+  });
   it.each([["22023",400],["42501",403],["23505",409],["XX000",500]])("maps %s safely", async (code,status) => {
     rpc.mockResolvedValue({ data: null, error: { code, message: "private SQL detail" } });
     const response = await POST(request({ clientKey, command }));

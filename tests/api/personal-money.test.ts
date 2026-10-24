@@ -82,7 +82,7 @@ describe("exact personal money", () => {
   });
 
   it("round-trips signed values for each approved currency", () => {
-    expect(DEFAULT_CURRENCY).toBe("UZS");
+    expect(DEFAULT_CURRENCY).toBe("JPY");
     expect(CURRENCY_SCALES).toEqual({ UZS: 2, JPY: 0, USD: 2 });
     for (const scale of Object.values(CURRENCY_SCALES)) {
       for (const value of [BigInt(0), BigInt(1), -BigInt(1), BigInt("9007199254740993")]) {

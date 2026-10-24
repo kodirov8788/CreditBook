@@ -6,6 +6,7 @@ container="creditbook-g01-test-$(date +%s)-$$"
 # Pin the tested upstream image; update deliberately alongside test evidence.
 image='postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24'
 pilot_migration='supabase/migrations/20261019055603_personal_pilot_access.sql'
+book_migration='supabase/migrations/20261019063444_personal_single_book.sql'
 created=false
 cleanup() {
   if [ "$created" = true ]; then
@@ -16,12 +17,19 @@ trap cleanup EXIT
 docker --context colima run --network none --name "$container" --label creditbook.test=g01 \
   -e POSTGRES_HOST_AUTH_METHOD=trust -d "$image" >/dev/null
 created=true
+ready=false
 for attempt in {1..30}; do
-  if docker --context colima exec "$container" pg_isready -U postgres >/dev/null 2>&1; then
+  # The bootstrap Unix-socket server restarts before the final TCP server.
+  if docker --context colima exec "$container" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then
+    ready=true
     break
   fi
   sleep 1
 done
+if [ "$ready" != true ]; then
+  echo 'FAIL: disposable PostgreSQL did not become ready.' >&2
+  exit 1
+fi
 sql() {
   echo "Checking $1"
   docker --context colima exec -i "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres < "$1"
@@ -48,8 +56,12 @@ sql tests/database/personal-workspace-concurrent-check.sql
 sql tests/database/personal-pilot-before.sql
 for migration in supabase/migrations/*.sql; do
   if [[ "$migration" < "$pilot_migration" ]]; then continue; fi
+  if [[ "$migration" == "$book_migration" ]]; then
+    sql tests/database/personal-pilot.sql
+    sql tests/database/personal-book-before.sql
+  fi
   sql "$migration"
 done
-sql tests/database/personal-pilot.sql
+sql tests/database/personal-book.sql
 docker --context colima image inspect "$image" --format '{{json .RepoDigests}}'
 echo 'PASS: PostgreSQL migration/RLS tests (not full Supabase E2E).'

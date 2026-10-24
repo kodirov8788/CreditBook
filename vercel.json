@@ -1,3 +1,8 @@
 {
-  "outputDirectory": ".next"
+  "framework": "nextjs",
+  "buildCommand": "next build --webpack",
+  "installCommand": "npm ci --ignore-scripts --no-fund",
+  "regions": [
+    "iad1"
+  ]
 }
