@@ -13,6 +13,9 @@ export type VoiceEntry = Readonly<{
   categoryId: string | null;
   effectiveDate: string;
   note: string;
+  taxRatePercent?: 8 | 10 | null;
+  /** Application-computed evidence; never supplied by the model. */
+  receiptTax?: Readonly<{ baseMinor: string; taxMinor: string }>;
 }>;
 export type VoiceDraft = Readonly<{
   transcript: string;
@@ -22,7 +25,14 @@ export type VoiceDraft = Readonly<{
   clarification: string | null;
   receipt?: ReceiptSummary;
 }>;
-export type ReceiptSummary = Readonly<{ totalMinor: string | null; currencyCode: "JPY" | "USD" | "UZS" | null; complete: boolean }>;
+export type ReceiptSummary = Readonly<{
+  totalMinor: string | null;
+  currencyCode: "JPY" | "USD" | "UZS" | null;
+  complete: boolean;
+  /** Explicit, uniform outside tax only; null/absent means unknown or already included. */
+  taxMinor?: string | null;
+  taxRatePercent?: 8 | 10 | null;
+}>;
 export type VoiceDraftRequest = Readonly<{
   requestId: string;
   consent: typeof VOICE_CONSENT_VERSION;

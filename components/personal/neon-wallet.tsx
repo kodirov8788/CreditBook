@@ -260,7 +260,11 @@ export default function NeonWallet({ initialView = "home" }: { initialView?: "ho
   const categoryLocked = locked || categoriesLoading || categoriesError;
   return <main className={styles.shell}>
     <header className={styles.header}><a href="/personal" className={styles.brand}><span>C</span> CreditBook</a>
-      {user && <button type="button" aria-label="Chiqish" title="Chiqish" disabled={locked} onClick={() => void logout()}><LogOut size={20}/></button>}</header>
+      <div className={styles.headerActions}>{user && book && ledger && !checking && <> <details className={styles.headerPreferences}><summary aria-label="Kiritish sozlamalari" title="Kiritish sozlamalari"><Settings size={20}/></summary><div className={styles.preferencesPanel}>
+        <label>Asosiy kiritish usuli<select value={preferences.entry} disabled={locked} onChange={event => { const entry = event.target.value === "manual" ? "manual" : event.target.value === "receipt" ? "receipt" : "voice"; updatePreferences({...preferences,entry}); setEntryMode(entry); }}><option value="voice">Ovoz</option><option value="manual">Qo‘lda</option><option value="receipt">Chek rasmi</option></select></label>
+        <label>Toifa qo‘shish usuli<select value={preferences.category} disabled={locked} onChange={event => { const category = event.target.value === "text" ? "text" : "voice"; updatePreferences({...preferences,category}); setCategoryMode(category); }}><option value="voice">Ovoz</option><option value="text">Matn</option></select></label>
+        <p className={styles.hint}>Shu brauzer va akkaunt uchun saqlanadi. Bir martalik usul tanlash defaultni o‘zgartirmaydi.</p>
+      </div></details> </>}{user && <button type="button" aria-label="Chiqish" title="Chiqish" disabled={locked} onClick={() => void logout()}><LogOut size={20}/></button>}</div></header>
     <div className={styles.topline}><p>SHAXSIY HISOB</p><span>JPY · Yaponiya vaqti</span></div>
     {checking && <section className={styles.loading} aria-label="Hisob yuklanmoqda">
       <div className={styles.loadingStatus} role="status" aria-live="polite" aria-atomic="true"><span className={styles.loadingIcon}><LoaderCircle size={21} aria-hidden="true"/></span><div><strong>Hisobingiz tayyorlanmoqda</strong><p>Qoldiq va oxirgi yozuvlar yuklanmoqda.</p></div></div>
@@ -283,17 +287,13 @@ export default function NeonWallet({ initialView = "home" }: { initialView?: "ho
         <button className={styles.primary} disabled={locked}>Hisobni ochish</button>
       </form></section>}
     {user && book && ledger && <>
-      <details className={styles.preferences}><summary><Settings size={17}/> Kiritish sozlamalari</summary>
-        <label>Asosiy kiritish usuli<select value={preferences.entry} disabled={locked} onChange={event => { const entry = event.target.value === "manual" ? "manual" : event.target.value === "receipt" ? "receipt" : "voice"; updatePreferences({...preferences,entry}); setEntryMode(entry); }}><option value="voice">Ovoz</option><option value="manual">Qo‘lda</option><option value="receipt">Chek rasmi</option></select></label>
-        <label>Toifa qo‘shish usuli<select value={preferences.category} disabled={locked} onChange={event => { const category = event.target.value === "text" ? "text" : "voice"; updatePreferences({...preferences,category}); setCategoryMode(category); }}><option value="voice">Ovoz</option><option value="text">Matn</option></select></label>
-        <p className={styles.hint}>Shu brauzer va akkaunt uchun saqlanadi. Bir martalik usul tanlash defaultni o‘zgartirmaydi.</p>
-      </details>
+
       {view !== "home" && <button disabled={locked} onClick={() => { setView("home"); setEntryMode(preferences.entry); }}>← Hisobga qaytish</button>}
       {view === "home" ? <>
-        <section className={styles.balance}><p>Jami qoldiq</p><h1>{money(ledger.balanceMinor)}</h1>{BigInt(ledger.balanceMinor) < BigInt(0) && <p>Qoldiq manfiy. Yangi xarajat kiritish mumkin.</p>}
+        <section className={styles.balance}><p>Jami qoldiq</p><h1>{money(ledger.balanceMinor)}</h1>{BigInt(ledger.balanceMinor) < BigInt(0) && <p className={styles.negativeHint}>Qoldiq manfiy. Xarajat kiritish mumkin.</p>}
           <div className={styles.totals}><div><span><ArrowDownLeft size={16}/> Kirim</span><strong>{money(ledger.incomeMinor)}</strong></div><div><span><ArrowUpRight size={16}/> Chiqim</span><strong>{money(ledger.expenseMinor)}</strong></div></div>
         </section>
-        <section className={styles.quickEntry} aria-label="Yozuv qo‘shish"><h2>Bir gap bilan kiriting</h2><p className={styles.hint}>Yozishni o‘zingiz boshlaysiz va tugatasiz. Keyin tekshirib tasdiqlaysiz.</p>
+        <section className={styles.quickEntry} aria-label="Yozuv qo‘shish"><h2>Yozuv qo‘shish</h2>
           <div className={styles.shortcuts} role="group" aria-label="Kiritish va boshqaruv">
             <button type="button" aria-pressed={entryMode === "voice"} disabled={locked} onClick={() => setEntryMode("voice")}><Mic size={18}/> Ovoz</button>
             <button type="button" aria-pressed={entryMode === "manual"} disabled={locked} onClick={() => setEntryMode("manual")}><Plus size={18}/> Qo‘lda</button>

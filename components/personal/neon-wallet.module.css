@@ -28,3 +28,25 @@
 
 /* Compact voice-first home, sharing existing financial and owner-safe flows. */
 .balance{background:transparent;color:#19392d;border:1px solid #dbe5de;padding:24px}.balance>p,.totals span{color:#64796d}.balance h1{margin-bottom:22px}.totals{border-color:#dbe5de}.quickEntry{border:1px solid #dbe5de;border-radius:22px;padding:22px;margin-top:20px}.quickEntry h2{font-size:22px;margin:0;text-wrap:balance}.shortcuts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:18px 0}.shortcuts button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:1px solid #dbe5de;border-radius:12px;font-size:12px;padding:10px 4px}.shortcuts button[aria-pressed=true]{background:#e4f3e9;border-color:#1e7955;color:#1e7955;font-weight:700}.preferences{margin-top:20px;border:1px solid #dbe5de;border-radius:13px;padding:12px}.preferences summary{cursor:pointer;display:flex;align-items:center;gap:8px;min-height:44px}.preferences select{display:block;width:100%;margin-top:8px}.preferences summary:focus-visible{outline:3px solid #62bc91;outline-offset:3px}@media(max-width:520px){.quickEntry{padding:16px}.shortcuts{gap:4px}.shortcuts button{font-size:11px}.categories .inline{flex-wrap:wrap}.categories .inline .primary{width:100%}}
+
+/* Approved A layout: settings share the header; financial controls are unchanged. */
+.headerActions{display:flex;align-items:center;gap:4px;position:relative}
+.headerPreferences{position:relative}
+.headerPreferences>summary{display:flex;align-items:center;justify-content:center;width:44px;min-height:44px;border:1px solid #dbe5de;border-radius:12px;cursor:pointer;list-style:none}
+.headerPreferences>summary::-webkit-details-marker{display:none}
+.headerPreferences>summary:focus-visible{outline:3px solid #62bc91;outline-offset:3px}
+.preferencesPanel{position:absolute;right:-48px;top:52px;z-index:20;width:300px;max-width:calc(100vw - 32px);padding:16px;border:1px solid #dbe5de;border-radius:16px;background:#fbfdfb;box-shadow:0 6px 18px #15332118}
+.preferencesPanel label{margin-top:0}.preferencesPanel select{display:block;width:100%;margin:6px 0 12px}
+@media(max-width:520px){
+.shell{padding:12px 16px 80px}.topline{margin:6px 0 8px;line-height:1.4}.topline p{margin:0}
+.balance{padding:10px 16px;border-radius:18px;margin-top:8px}.balance>p{font-size:12px;line-height:1.4}
+.balance h1{font-size:32px;line-height:1.15;margin:4px 0 4px}.balance .negativeHint{font-size:11px;margin:0 0 8px;line-height:1.4}
+.totals{padding-top:6px;gap:16px}.totals span{font-size:11px;line-height:1.4}.totals strong{font-size:15px;margin-top:3px;line-height:1.4}
+.quickEntry{padding:10px;border-radius:18px;margin-top:8px}.quickEntry h2{font-size:18px;line-height:1.3}
+.shortcuts{margin:8px 0;gap:4px}.shortcuts button{min-height:44px;padding:6px 2px;font-size:11px;line-height:1.3}.shortcuts svg{display:none}
+.history{margin-top:18px}.skeletonBalance{min-height:150px;padding:16px}.skeletonAmount{height:36px;margin:8px 0 12px}.loadingStatus{margin-bottom:12px}
+}
+
+@media(min-width:521px){.topline{margin-top:12px}.topline p{margin:0}.balance{margin-top:12px;padding:20px}.balance h1{margin:8px 0 12px}.totals{padding-top:12px}.quickEntry{padding:18px;margin-top:14px}.shortcuts{margin:12px 0}}
+
+.headerActions>button{width:44px;min-width:44px;padding:0;display:grid;place-items:center}
