@@ -39,3 +39,12 @@
 .working small{display:block;margin-top:8px;font-size:12px;line-height:1.5;color:#596c61}
 @keyframes workingTurn{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.workingIcon svg{animation:none}}
+
+.privacy p{margin:0}.privacy details>summary{display:flex;align-items:center;min-height:44px;text-decoration:underline;cursor:pointer}.privacy details>summary:focus-visible{outline:3px solid #62bc91;outline-offset:2px}.privacy details[open]>p{margin-top:4px}
+.panel .consent{margin:0;min-height:44px;align-items:center}
+@media(max-width:520px){
+.panel{gap:0}.privacy{padding:8px 10px;font-size:11px;line-height:1.45;border-radius:11px}
+.panel .consent{font-size:12px}.record{min-height:60px!important;border-radius:14px!important}
+.status{margin:8px 0 0;font-size:11px;line-height:1.4}
+.receipt,.drafts,.working,.clarification{margin-top:10px}
+}
