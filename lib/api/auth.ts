@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseDataClient, type DataClient } from "@/lib/data/client";
 import { forbidden, unauthorized } from "@/lib/api/response";
+import { createSupabaseShopPermissions } from "@/lib/data/shop-permissions";
 
 export async function getAuthenticatedClient(request?: Request) {
   const authClient = await createClient(request);
@@ -25,14 +26,8 @@ export async function requireShopPermission(
 ) {
   if (!supabase || !user) return { ok: false as const, response: unauthorized() };
 
-  const { data: shopId, error: shopError } = await supabase.rpc("get_current_shop_id");
-  if (shopError || !shopId) return { ok: false as const, response: forbidden() };
-
-  const { data: allowed, error: permissionError } = await supabase.rpc("has_shop_permission", {
-    p_shop_id: shopId,
-    p_permission: permission,
-  });
-  if (permissionError || !allowed) return { ok: false as const, response: forbidden() };
-
-  return { ok: true as const, shopId: shopId as string };
+  try {
+    const shopId = await createSupabaseShopPermissions(supabase).currentAccess(permission);
+    return shopId ? { ok: true as const, shopId } : { ok: false as const, response: forbidden() };
+  } catch { return { ok: false as const, response: forbidden() }; }
 }

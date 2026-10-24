@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { createClient, hasSupabaseEnv } from "@/lib/supabase/browser";
 import { loginDestination } from "@/lib/login-destination";
 import styles from "./page.module.css";
+import NeonLogin from "@/components/auth/neon-login";
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -67,5 +68,8 @@ function LoginForm() {
 }
 
 export default function LoginPage() {
+  // Explicit local opt-in only; the server independently rejects hosted use.
+  // Do not mount legacy Auth or navigate to Supabase-backed business routes.
+  if (process.env.NEXT_PUBLIC_CREDITBOOK_NEON_ENABLED === "1" || process.env.NEXT_PUBLIC_CREDITBOOK_NEON_AUTH_LOCAL === "1") return <NeonLogin />;
   return <Suspense fallback={<main className="login-shell"><div className="login-card"><strong>Yuklanmoqda...</strong></div></main>}><LoginForm /></Suspense>;
 }

@@ -7,6 +7,7 @@ import PersonalCategories from "@/components/personal/categories";
 export const dynamic = "force-dynamic";
 
 export default async function CategoryPage() {
+  if (process.env.CREDITBOOK_NEON_ENABLED === "1" || process.env.CREDITBOOK_NEON_PERSONAL_LOCAL === "1") redirect("/personal?view=categories");
   const supabase = await createClient();
   if (!supabase) return <main className="login-shell"><p>Kirish sozlamasi topilmadi.</p></main>;
   const { data: { user } } = await supabase.auth.getUser();
