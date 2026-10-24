@@ -1,3 +1,4 @@
+import { handleLocalNeonPersonal, usesLocalNeonPersonal } from "@/lib/api/neon-personal";
 import { NextResponse } from "next/server";
 import { getAuthenticatedClient } from "@/lib/api/auth";
 import { getPersonalAccess, personalAccessResponse } from "@/lib/api/personal-access";
@@ -8,6 +9,7 @@ export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store" };
 
 export async function GET(request: Request) {
+  if (usesLocalNeonPersonal()) return handleLocalNeonPersonal(request, "book");
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
   const access = await getPersonalAccess(supabase, user);
@@ -18,6 +20,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (usesLocalNeonPersonal()) return handleLocalNeonPersonal(request, "book");
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
   const access = await getPersonalAccess(supabase, user);

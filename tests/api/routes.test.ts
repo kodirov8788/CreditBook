@@ -70,6 +70,15 @@ describe("authenticated API contracts", () => {
     expect(supabase.from).not.toHaveBeenCalled();
   });
 
+  it.each([{ name: 12 }, { name: "Valid", phone: 12 }, { name: "Valid", notes: {} },
+    { name: "Valid", amount: "5" }, { name: "Valid", dueDate: 12 }])("rejects malformed customer input without writes: %j", async body => {
+    const rpc = vi.fn(), from = vi.fn();
+    authMock.mockResolvedValue({ supabase: { rpc, from } as never, user: { id: "user-1" } as never });
+    expect((await createCustomer(request(body))).status).toBe(400);
+    expect(rpc).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+  });
+
   it("protects customer details and validates customer edits", async () => {
     authMock.mockResolvedValue({ supabase: null, user: null });
     const unauthenticated = await getCustomer(new Request("http://localhost/api/customers/customer-1"), { params: Promise.resolve({ id: "customer-1" }) });

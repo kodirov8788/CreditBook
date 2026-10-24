@@ -3,10 +3,12 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getPersonalAccess } from "@/lib/api/personal-access";
 import PersonalBook from "@/components/personal/book";
+import NeonWallet from "@/components/personal/neon-wallet";
 
 export const dynamic = "force-dynamic";
 
-export default async function PersonalPage() {
+export default async function PersonalPage({ searchParams }: { searchParams: Promise<{view?: string}> }) {
+  if (process.env.CREDITBOOK_NEON_ENABLED === "1" || process.env.CREDITBOOK_NEON_PERSONAL_LOCAL === "1") return <NeonWallet initialView={(await searchParams).view === "categories" ? "categories" : "home"} />;
   const supabase = await createClient();
   if (!supabase) return <main className="login-shell"><p>Kirish sozlamasi topilmadi.</p></main>;
   const { data: { user } } = await supabase.auth.getUser();

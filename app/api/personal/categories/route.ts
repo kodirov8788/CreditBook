@@ -1,3 +1,4 @@
+import { handleLocalNeonPersonal, usesLocalNeonPersonal } from "@/lib/api/neon-personal";
 import { NextResponse } from "next/server";
 import type { DataClient } from "@/lib/data/client";
 import { getAuthenticatedClient } from "@/lib/api/auth";
@@ -61,6 +62,7 @@ async function getAllowedClient(request: Request): Promise<
 }
 
 export async function GET(request: Request) {
+  if (usesLocalNeonPersonal()) return handleLocalNeonPersonal(request, "categories");
   try {
     const client = await getAllowedClient(request);
     if (!client.ok) return client.response;
@@ -92,6 +94,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (usesLocalNeonPersonal()) return handleLocalNeonPersonal(request, "categories");
   try {
     const client = await getAllowedClient(request);
     if (!client.ok) return client.response;

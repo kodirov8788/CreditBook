@@ -1,3 +1,4 @@
+import { handleLocalNeonPersonal, usesLocalNeonPersonal } from "@/lib/api/neon-personal";
 import { NextResponse } from "next/server";
 import { getAuthenticatedClient } from "@/lib/api/auth";
 import { getPersonalAccess, personalAccessResponse } from "@/lib/api/personal-access";
@@ -8,6 +9,7 @@ export const dynamic = "force-dynamic";
 const keyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function GET(request: Request) {
+  if (usesLocalNeonPersonal()) return handleLocalNeonPersonal(request, "accounts");
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
   const access = await getPersonalAccess(supabase, user);
@@ -21,6 +23,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (usesLocalNeonPersonal()) return handleLocalNeonPersonal(request, "accounts");
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
   const access = await getPersonalAccess(supabase, user);

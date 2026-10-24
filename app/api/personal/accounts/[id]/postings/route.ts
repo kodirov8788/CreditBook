@@ -1,3 +1,4 @@
+import { handleLocalNeonPersonal, usesLocalNeonPersonal } from "@/lib/api/neon-personal";
 import { NextResponse } from "next/server";
 import { getAuthenticatedClient } from "@/lib/api/auth";
 import { getPersonalAccess, personalAccessResponse } from "@/lib/api/personal-access";
@@ -5,6 +6,7 @@ import { badRequest, serverError, unauthorized } from "@/lib/api/response";
 import { decodeHistoryCursor, encodeHistoryCursor, type HistoryCursor } from "@/lib/personal-finance/history-cursor";
 
 export async function GET(request: Request, context: {params:Promise<{id:string}>}) {
+  if (usesLocalNeonPersonal()) return handleLocalNeonPersonal(request, "history", (await context.params).id);
   const {supabase,user}=await getAuthenticatedClient(request);
   if(!supabase||!user)return unauthorized();
   const access = await getPersonalAccess(supabase, user);
