@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Plus, ArrowDownLeft, ArrowUpRight, LogOut, X, Tags, Wallet, ChevronRight, LoaderCircle } from "lucide-react";
+import { Mic, Image as ImageIcon, Settings, Plus, ArrowDownLeft, ArrowUpRight, LogOut, X, Tags, Wallet, ChevronRight, LoaderCircle } from "lucide-react";
 import { readSession, signOut, watchSessionChanged } from "@/lib/auth/client";
 import type { AuthIdentity } from "@/lib/auth/identity";
 import type { PersonalLedger, PersonalSnapshot } from "@/lib/data/neon-personal-ledger";
 import { createWalletRefresh, readRemainingCategories, type CategoryPage } from "@/lib/personal-finance/wallet-refresh";
 import { VoiceEntry, type ConfirmedVoiceEntry } from "./voice-entry";
+import { categoryNameProblem, DEFAULT_INPUT_PREFERENCES, parseInputPreferences, type InputPreferences } from "@/lib/personal-finance/input-preferences";
 import styles from "./neon-wallet.module.css";
 
 type Category = { id: string; name: string; status: "active" | "archived"; version: number };
@@ -38,7 +39,12 @@ export default function NeonWallet({ initialView = "home" }: { initialView?: "ho
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState("");
   const [dialog, setDialog] = useState(false), [kind, setKind] = useState<"expense" | "income">("expense");
-  const [entryMode, setEntryMode] = useState<"manual" | "voice">("manual");
+  const [entryMode, setEntryMode] = useState<"manual" | "voice" | "receipt">("voice");
+  const [preferences, setPreferences] = useState<InputPreferences>(DEFAULT_INPUT_PREFERENCES);
+  const preferenceOwner = useRef<string | null>(null);
+  const [categoryMode, setCategoryMode] = useState<"voice" | "text">("voice");
+  const [categoryReview, setCategoryReview] = useState(false);
+  const [voiceRevision, setVoiceRevision] = useState(0);
   const [amount, setAmount] = useState(""), [note, setNote] = useState(""), [date, setDate] = useState(today);
   const [categoryId, setCategoryId] = useState(""), [name, setName] = useState("");
   const [editing, setEditing] = useState<Category | null>(null), [opening, setOpening] = useState("0");
@@ -59,7 +65,7 @@ export default function NeonWallet({ initialView = "home" }: { initialView?: "ho
     categoryController.current?.abort();
     categoryController.current = null;
     setUser(null); setLedger(null); setCategories([]); setCategoriesLoading(false); setCategoriesError(false);
-    setDialog(false); setAmount(""); setNote(""); setCategoryId(""); setName(""); setEditing(null); setArchiving(null); setOpening("0");
+    setDialog(false); setAmount(""); setNote(""); setCategoryId(""); setName(""); setEditing(null); setArchiving(null); setOpening("0"); setCategoryReview(false);
   }, []);
 
   const completeCategories = useCallback(async (id: string, first?: CategoryPage<Category>) => {
@@ -107,6 +113,12 @@ export default function NeonWallet({ initialView = "home" }: { initialView?: "ho
         clearPrivate();
         setMessage(session.ok || session.code === "OWNER_CHANGED" ? "Akkaunt boshqa tabda almashdi. Qoralama saqlanmadi. Qayta kiring." : "Hisobga qayta kiring.");
         return;
+      }
+      if (preferenceOwner.current !== session.user.id) {
+        let stored: string | null = null;
+        try { stored = localStorage.getItem(`creditbook:input:${session.user.id}`); } catch { /* Storage unavailable: voice defaults still work. */ }
+        const next = parseInputPreferences(stored);
+        preferenceOwner.current = session.user.id; setPreferences(next); setEntryMode(next.entry); setCategoryMode(next.category);
       }
       owner.current = session.user.id;
       const id = session.user.id;
@@ -178,7 +190,7 @@ export default function NeonWallet({ initialView = "home" }: { initialView?: "ho
     try {
       await api(intent.path, intent.owner, AbortSignal.timeout(20000), intent);
       if (!mounted.current) return;
-      setPending(null); setDialog(false); setAmount(""); setNote(""); setName(""); setEditing(null); setArchiving(null);
+      setPending(null); setDialog(false); setAmount(""); setNote(""); setName(""); setEditing(null); setArchiving(null); setCategoryReview(false); setVoiceRevision(revision => revision + 1);
       if (!invalidated.current) await load("saved", user);
     } catch (error) {
       if (!mounted.current) return;
@@ -231,6 +243,18 @@ export default function NeonWallet({ initialView = "home" }: { initialView?: "ho
   function submitVoiceEntries(entries: readonly ConfirmedVoiceEntry[]) {
     void save("/api/personal/entries", { entries });
   }
+  function updatePreferences(next: InputPreferences) {
+    if (!user || locked) return;
+    setPreferences(next);
+    try { localStorage.setItem(`creditbook:input:${user.id}`, JSON.stringify(next)); }
+    catch { setMessage("Sozlama shu sessiya uchun saqlandi. Brauzer doimiy saqlashga ruxsat bermadi."); }
+  }
+  function showCategories() {
+    setView("categories"); setCategoryMode(preferences.category); setName(""); setEditing(null); setCategoryReview(false); setMessage("");
+  }
+  function authFailure() {
+    generation.current++; controller.current?.abort(); pageController.current?.abort(); clearPrivate(); setMessage("Hisobga qayta kiring.");
+  }
   const activeCategories = categories.filter(category => category.status === "active");
   const locked = busy || checking || refreshing || !!pending;
   const categoryLocked = locked || categoriesLoading || categoriesError;
@@ -259,22 +283,41 @@ export default function NeonWallet({ initialView = "home" }: { initialView?: "ho
         <button className={styles.primary} disabled={locked}>Hisobni ochish</button>
       </form></section>}
     {user && book && ledger && <>
-      <nav className={styles.tabs} aria-label="Hisob bo‘limlari"><button aria-pressed={view === "home"} onClick={() => setView("home")}><Wallet size={17}/> Hisob</button><button aria-pressed={view === "categories"} onClick={() => setView("categories")}><Tags size={17}/> Toifalar</button></nav>
+      <details className={styles.preferences}><summary><Settings size={17}/> Kiritish sozlamalari</summary>
+        <label>Asosiy kiritish usuli<select value={preferences.entry} disabled={locked} onChange={event => { const entry = event.target.value === "manual" ? "manual" : event.target.value === "receipt" ? "receipt" : "voice"; updatePreferences({...preferences,entry}); setEntryMode(entry); }}><option value="voice">Ovoz</option><option value="manual">Qo‘lda</option><option value="receipt">Chek rasmi</option></select></label>
+        <label>Toifa qo‘shish usuli<select value={preferences.category} disabled={locked} onChange={event => { const category = event.target.value === "text" ? "text" : "voice"; updatePreferences({...preferences,category}); setCategoryMode(category); }}><option value="voice">Ovoz</option><option value="text">Matn</option></select></label>
+        <p className={styles.hint}>Shu brauzer va akkaunt uchun saqlanadi. Bir martalik usul tanlash defaultni o‘zgartirmaydi.</p>
+      </details>
+      {view !== "home" && <button disabled={locked} onClick={() => { setView("home"); setEntryMode(preferences.entry); }}>← Hisobga qaytish</button>}
       {view === "home" ? <>
         <section className={styles.balance}><p>Jami qoldiq</p><h1>{money(ledger.balanceMinor)}</h1>{BigInt(ledger.balanceMinor) < BigInt(0) && <p>Qoldiq manfiy. Yangi xarajat kiritish mumkin.</p>}
           <div className={styles.totals}><div><span><ArrowDownLeft size={16}/> Kirim</span><strong>{money(ledger.incomeMinor)}</strong></div><div><span><ArrowUpRight size={16}/> Chiqim</span><strong>{money(ledger.expenseMinor)}</strong></div></div>
+        </section>
+        <section className={styles.quickEntry} aria-label="Yozuv qo‘shish"><h2>Bir gap bilan kiriting</h2><p className={styles.hint}>Yozishni o‘zingiz boshlaysiz va tugatasiz. Keyin tekshirib tasdiqlaysiz.</p>
+          <div className={styles.shortcuts} role="group" aria-label="Kiritish va boshqaruv">
+            <button type="button" aria-pressed={entryMode === "voice"} disabled={locked} onClick={() => setEntryMode("voice")}><Mic size={18}/> Ovoz</button>
+            <button type="button" aria-pressed={entryMode === "manual"} disabled={locked} onClick={() => setEntryMode("manual")}><Plus size={18}/> Qo‘lda</button>
+            <button type="button" aria-pressed={entryMode === "receipt"} disabled={locked} onClick={() => setEntryMode("receipt")}><ImageIcon size={18}/> Chek rasmi</button>
+            <button type="button" disabled={locked} onClick={showCategories}><Tags size={18}/> Toifalar</button>
+          </div>
+          {entryMode === "manual" ? <button className={styles.primary} disabled={categoryLocked} onClick={() => { setDialog(true); setCategoryId(activeCategories[0]?.id ?? ""); setDate(today()); setMessage(""); }}>Qo‘lda kiritish</button>
+            : <VoiceEntry key={`${user.id}-${entryMode}-${voiceRevision}`} ownerId={user.id} disabled={categoryLocked} defaultKind={kind} hideSources initialSource={entryMode === "receipt" ? "receipt" : "audio"} categories={activeCategories} onConfirm={submitVoiceEntries} onMessage={setMessage} onAuthFailure={authFailure}/>}
         </section>
         <section className={styles.history}><div className={styles.sectionTitle}><h2>Tarix</h2><input aria-label="Hisobot oyi" type="month" min="0001-01" max="9999-12" value={month} disabled={busy || !!pending} onChange={event => { if (/^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) {selectedMonth.current = event.target.value; setMonth(event.target.value); void load("month",user);} }}/></div>
           <p className={styles.hint}>Kirim va chiqim tanlangan oy uchun. Qoldiq barcha yozuvlarni qamraydi.</p>
           {!ledger.entries.length ? <div className={styles.empty}><p>Bu oyda hali yozuv yo‘q.</p><span>Birinchi kirim yoki xarajatni qo‘shing.</span></div> : <ul className={styles.entries}>{ledger.entries.map(entry => <li key={entry.id}><span className={entry.kind === "income" ? styles.incomeIcon : styles.expenseIcon}>{entry.kind === "income" ? <ArrowDownLeft size={20}/> : <ArrowUpRight size={20}/>}</span><div><strong>{entry.note || entry.categoryName}</strong><small>{entry.categoryName} · {entry.effectiveDate}</small></div><b className={entry.kind === "income" ? styles.positive : ""}>{entry.kind === "income" ? "+" : "−"}{money(entry.amountMinor)}</b></li>)}</ul>}
           {ledger.nextCursor && <button className={styles.more} disabled={busy} onClick={() => void more()}>Yana ko‘rsatish <ChevronRight size={16}/></button>}
         </section>
-        <button className={styles.add} disabled={categoryLocked} onClick={() => { setDialog(true); setEntryMode("manual"); setCategoryId(activeCategories[0]?.id ?? ""); setDate(today()); setMessage(""); }}><Plus size={22}/> Qo‘shish</button>
+
       </> : <section className={styles.categories}><div className={styles.sectionTitle}><h1>Toifalar</h1><span>{activeCategories.length} faol</span></div>
-        <form onSubmit={event => { event.preventDefault(); void save("/api/personal/categories", editing ? {operation:"rename",categoryId:editing.id,categoryVersion:editing.version,name:name.trim()} : {operation:"create",name:name.trim()}); }}>
-          <label htmlFor="category-name">{editing ? "Yangi nom" : "Yangi toifa"}</label><div className={styles.inline}><input id="category-name" value={name} required maxLength={80} disabled={categoryLocked} placeholder="Masalan, Oziq-ovqat" onChange={event => setName(event.target.value)}/><button className={styles.primary} disabled={categoryLocked || !name.trim()}>{editing ? "Saqlash" : "Qo‘shish"}</button></div>
-          {editing && <button type="button" disabled={locked} onClick={() => {setEditing(null);setName("");}}>Bekor qilish</button>}
-        </form>
+        {!editing && <div className={styles.tabs} role="group" aria-label="Toifa kiritish usuli"><button type="button" aria-pressed={categoryMode === "voice"} disabled={categoryLocked} onClick={() => {setCategoryMode("voice");setCategoryReview(false);setName("");}}>Ovoz</button><button type="button" aria-pressed={categoryMode === "text"} disabled={categoryLocked} onClick={() => {setCategoryMode("text");setCategoryReview(false);setName("");}}>Matn</button></div>}
+        {!editing && categoryMode === "voice" ? <VoiceEntry key={`${user.id}-category-${voiceRevision}`} purpose="category" ownerId={user.id} disabled={categoryLocked} defaultKind="expense" categories={activeCategories} existingCategoryNames={categories.map(category => category.name)} onCategoryConfirm={value => void save("/api/personal/categories",{operation:"create",name:value})} onConfirm={() => {}} onMessage={setMessage} onAuthFailure={authFailure}/>
+          : <form onSubmit={event => { event.preventDefault(); const problem = categoryNameProblem(name,categories.filter(category => category.id !== editing?.id).map(category => category.name)); if (problem) {setMessage(problem);return;} if (!editing && !categoryReview) {setCategoryReview(true);return;} void save("/api/personal/categories", editing ? {operation:"rename",categoryId:editing.id,categoryVersion:editing.version,name:name.trim().replace(/\s+/g," ")} : {operation:"create",name:name.trim().replace(/\s+/g," ")}); }}>
+          <label htmlFor="category-name">{editing ? "Yangi nom" : categoryReview ? "Toifani tekshiring" : "Yangi toifa"}</label><div className={styles.inline}><input id="category-name" value={name} required maxLength={80} disabled={categoryLocked} placeholder="Masalan, Oziq-ovqat" onChange={event => setName(event.target.value)}/><button className={styles.primary} disabled={categoryLocked || !!categoryNameProblem(name,categories.filter(category => category.id !== editing?.id).map(category => category.name))}>{editing ? "Saqlash" : categoryReview ? "Toifani tasdiqlash" : "Tekshirish"}</button></div>
+          {name && categoryNameProblem(name,categories.filter(category => category.id !== editing?.id).map(category => category.name)) && <p role="alert">{categoryNameProblem(name,categories.filter(category => category.id !== editing?.id).map(category => category.name))}</p>}
+          {(editing || categoryReview) && <button type="button" disabled={locked} onClick={() => {setEditing(null);setName("");setCategoryReview(false);}}>Bekor qilish</button>}
+        </form>}
+
         {archiving && <div className={styles.notice}><p>“{archiving.name}” arxivlansinmi? Eski yozuvlar o‘chmaydi.</p><button disabled={categoryLocked} onClick={() => void save("/api/personal/categories",{operation:"archive",categoryId:archiving.id,categoryVersion:archiving.version})}>Arxivlashni tasdiqlash</button><button disabled={locked} onClick={() => setArchiving(null)}>Bekor qilish</button></div>}
         <ul className={styles.categoryList}>{categories.map(category => <li key={category.id}><div><strong>{category.name}</strong><small>{category.status === "active" ? "Faol" : "Arxivlangan · eski yozuvlar saqlangan"}</small></div>{category.status === "active" && <div className={styles.categoryActions}><button disabled={categoryLocked} aria-label={`${category.name}: nomlash`} onClick={() => {setEditing(category);setName(category.name);}}>Nomlash</button><button disabled={categoryLocked} aria-label={`${category.name}: arxivlash`} onClick={() => setArchiving(category)}>Arxivlash</button></div>}</li>)}</ul>
         {!categories.length && <p className={styles.hint}>Birinchi toifangizni qo‘shing: masalan, Oziq-ovqat yoki Boshqa.</p>}
@@ -282,7 +325,6 @@ export default function NeonWallet({ initialView = "home" }: { initialView?: "ho
       <footer className={styles.footer}>{user.email}<br/>Yopiq sinov · ma’lumotlar faqat sizning hisobingizda</footer>
     </>}
     {dialog && user && <div className={styles.backdrop}><section role="dialog" aria-modal="true" aria-labelledby="entry-title" className={styles.dialog}><div className={styles.sectionTitle}><h2 id="entry-title">Yangi yozuv</h2><button aria-label="Yopish" disabled={busy || !!pending} onClick={() => setDialog(false)}><X size={22}/></button></div>
-      <div className={styles.tabs} role="group" aria-label="Yozuv usuli"><button type="button" aria-pressed={entryMode === "manual"} disabled={locked} onClick={() => setEntryMode("manual")}>Qo‘lda</button><button type="button" aria-pressed={entryMode === "voice"} disabled={locked} onClick={() => setEntryMode("voice")}>Ovoz, matn, chek</button></div>
       {entryMode === "manual" ? <form onSubmit={submitEntry}>
         <fieldset disabled={categoryLocked}><legend className={styles.hint}>Amal turi</legend><div className={styles.tabs}><button type="button" aria-pressed={kind === "expense"} onClick={() => setKind("expense")}>Chiqim</button><button type="button" aria-pressed={kind === "income"} onClick={() => setKind("income")}>Kirim</button></div>
           <label htmlFor="entry-amount">Summa · JPY</label><input id="entry-amount" autoFocus inputMode="numeric" pattern="[1-9][0-9]*" required value={amount} onChange={event => setAmount(event.target.value)} placeholder="0" className={styles.amount}/>

@@ -7,6 +7,7 @@ import { VOICE_CONSENT_VERSION, VOICE_MAX_ENTRIES, VOICE_MAX_TEXT, type ReceiptS
 import { isReceiptSummary, receiptProblem } from "@/lib/personal-finance/receipt-contract";
 import { normalizeReceiptImage } from "@/lib/personal-finance/receipt-image";
 import { startVoiceRecorder, wavBase64, type VoiceRecorder } from "@/lib/personal-finance/voice-recorder";
+import { categoryNameProblem } from "@/lib/personal-finance/input-preferences";
 import styles from "./voice-entry.module.css";
 
 export type VoiceCategoryOption = Readonly<{ id: string; name: string }>;
@@ -19,6 +20,11 @@ export type VoiceEntryProps = Readonly<{
   onConfirm(entries: readonly ConfirmedVoiceEntry[]): void;
   onMessage(message: string): void;
   onAuthFailure(): void;
+  purpose?: "category";
+  hideSources?: boolean;
+  initialSource?: "audio" | "receipt";
+  existingCategoryNames?: readonly string[];
+  onCategoryConfirm?(name: string): void;
 }>;
 type EditableEntry = SuggestedVoiceEntry & { id: string };
 type Source = "text" | "audio" | "receipt";
@@ -49,6 +55,8 @@ export function parseVoiceDraftResponse(value: unknown, ownerId: string, request
   if (typeof draft.transcript !== "string" || [...draft.transcript].length > VOICE_MAX_TEXT || !Array.isArray(draft.entries) || draft.entries.length > VOICE_MAX_ENTRIES
     || !(typeof draft.clarification === "string" || draft.clarification === null) || typeof budget.remainingMicros !== "string" || !draft.entries.every(validSuggestion)) return null;
   if (row.categoryContextLimited !== undefined && typeof row.categoryContextLimited !== "boolean") return null;
+  if (draft.categoryName !== undefined && !(draft.categoryName === null || typeof draft.categoryName === "string" && !categoryNameProblem(draft.categoryName, []))) return null;
+  if (draft.categoryName !== undefined && draft.entries.length !== 0) return null;
   if (draft.receipt !== undefined && !isReceiptSummary(draft.receipt)) return null;
   return value as VoiceDraftResponse;
 }
@@ -74,12 +82,13 @@ export function confirmedVoiceEntries(entries: readonly EditableEntry[], transcr
   return result.length ? result : null;
 }
 
-export function VoiceEntry({ ownerId, disabled, defaultKind, categories, onConfirm, onMessage, onAuthFailure }: VoiceEntryProps) {
-  const [consent, setConsent] = useState(true), [source, setSource] = useState<Source>("audio"), [text, setText] = useState("");
+export function VoiceEntry({ ownerId, disabled, defaultKind, categories, onConfirm, onMessage, onAuthFailure, purpose, hideSources = false, initialSource = "audio", existingCategoryNames = [], onCategoryConfirm }: VoiceEntryProps) {
+  const [consent, setConsent] = useState(true), [source, setSource] = useState<Source>(initialSource), [text, setText] = useState("");
   const [recording, setRecording] = useState(false), [startingRecording, setStartingRecording] = useState(false), [audio, setAudio] = useState<string | null>(null), [analysing, setAnalysing] = useState(false);
   const [image, setImage] = useState<string | null>(null), [preparingImage, setPreparingImage] = useState(false), [receipt, setReceipt] = useState<ReceiptSummary | null>(null);
   const imageJob = useRef<symbol | null>(null);
   const imageInput = useRef<HTMLInputElement | null>(null);
+  const [categoryName, setCategoryName] = useState<string | null>(null);
   const [transcript, setTranscript] = useState(""), [entries, setEntries] = useState<EditableEntry[]>([]), [clarification, setClarification] = useState<string | null>(null), [draftSource, setDraftSource] = useState<Source | null>(null), [categoryContextLimited, setCategoryContextLimited] = useState(false);
   const recorder = useRef<VoiceRecorder | null>(null), request = useRef<{ id: string; ownerId: string; controller: AbortController } | null>(null), starting = useRef<AbortController | null>(null), mounted = useRef(false), consentRef = useRef(true);
   const stopActive = useCallback(() => { starting.current?.abort(); recorder.current?.cancel(); request.current?.controller.abort(); }, []);
@@ -95,7 +104,7 @@ export function VoiceEntry({ ownerId, disabled, defaultKind, categories, onConfi
   const changeConsent = (next: boolean) => {
     consentRef.current = next; setConsent(next);
     if (next) return;
-    releasePrivate(); setText(""); setAudio(null); setTranscript(""); setEntries([]); setClarification(null); setDraftSource(null); setCategoryContextLimited(false); setRecording(false); setStartingRecording(false); setAnalysing(false); onMessage("");
+    releasePrivate(); setText(""); setAudio(null); setTranscript(""); setEntries([]); setClarification(null); setDraftSource(null); setCategoryName(null); setCategoryContextLimited(false); setRecording(false); setStartingRecording(false); setAnalysing(false); onMessage("");
     setImage(null); setReceipt(null); setPreparingImage(false);
   };
   const selectImage = async (file: File | undefined) => {
@@ -103,7 +112,7 @@ export function VoiceEntry({ ownerId, disabled, defaultKind, categories, onConfi
     // Decode locally only; analysis and confirmation remain disabled.
     if (!file || !consentRef.current || request.current) return;
     const job = Symbol(); imageJob.current = job;
-    setPreparingImage(true); setImage(null); setReceipt(null); setEntries([]); setTranscript(""); setClarification(null); setDraftSource(null); onMessage("");
+    setPreparingImage(true); setImage(null); setReceipt(null); setEntries([]); setTranscript(""); setClarification(null); setDraftSource(null); setCategoryName(null); onMessage("");
     try {
       const normalized = await normalizeReceiptImage(file);
       if (mounted.current && consentRef.current && imageJob.current === job) setImage(normalized);
@@ -111,7 +120,7 @@ export function VoiceEntry({ ownerId, disabled, defaultKind, categories, onConfi
     finally { if (imageJob.current === job) { imageJob.current = null; setPreparingImage(false); } }
   };
   const switchSource = (next: Source) => {
-    imageJob.current = null; setPreparingImage(false); setImage(null); setReceipt(null); setEntries([]); setTranscript(""); setClarification(null); setDraftSource(null); setAudio(null); setSource(next); onMessage("");
+    imageJob.current = null; setPreparingImage(false); setImage(null); setReceipt(null); setEntries([]); setTranscript(""); setClarification(null); setDraftSource(null); setCategoryName(null); setAudio(null); setSource(next); onMessage("");
   };
   const changeEntry = (id: string, field: keyof SuggestedVoiceEntry, value: string) => setEntries(current => current.map(entry => {
     if (entry.id !== id) return entry;
@@ -122,7 +131,7 @@ export function VoiceEntry({ ownerId, disabled, defaultKind, categories, onConfi
   const record = async () => {
     if (!consentRef.current || disabled || recorder.current || starting.current || request.current || recording || startingRecording || analysing) return;
     const controller = new AbortController(); starting.current = controller;
-    setStartingRecording(true); setAudio(null); setEntries([]); setTranscript(""); setClarification(null); setDraftSource(null); setCategoryContextLimited(false);
+    setStartingRecording(true); setAudio(null); setEntries([]); setTranscript(""); setClarification(null); setDraftSource(null); setCategoryName(null); setCategoryContextLimited(false);
     try {
       const active = await startVoiceRecorder(undefined, controller.signal);
       if (controller.signal.aborted || !mounted.current || !consentRef.current) { active.cancel(); return; }
@@ -148,24 +157,29 @@ export function VoiceEntry({ ownerId, disabled, defaultKind, categories, onConfi
     if (!mounted.current || !consentRef.current || disabled || request.current || analysing || preparingImage || (requestSource === "text" ? !text.trim() : requestSource === "receipt" ? !image : !requestAudio)) return;
     const requestId = crypto.randomUUID(), controller = new AbortController();
     request.current = { id: requestId, ownerId, controller };
-    setAnalysing(true); setReceipt(null); setEntries([]); setTranscript(""); setClarification(null); setDraftSource(null); setCategoryContextLimited(false); onMessage("");
+    setAnalysing(true); setReceipt(null); setEntries([]); setTranscript(""); setClarification(null); setDraftSource(null); setCategoryName(null); setCategoryContextLimited(false); onMessage("");
     const body = requestSource === "text" ? { requestId, consent: VOICE_CONSENT_VERSION, defaultKind, mode: "text" as const, text: text.trim() }
       : requestSource === "receipt" ? { requestId, consent: VOICE_CONSENT_VERSION, defaultKind, mode: "receipt" as const, image: image! }
-      : { requestId, consent: VOICE_CONSENT_VERSION, defaultKind, mode: "audio" as const, audio: requestAudio! };
+      : { requestId, consent: VOICE_CONSENT_VERSION, defaultKind, mode: "audio" as const, audio: requestAudio!, ...(purpose === "category" ? { purpose } : {}) };
     try {
       const response = await fetch("/api/personal/voice-draft", { method: "POST", credentials: "same-origin", cache: "no-store", redirect: "error", signal: controller.signal, headers: { "Content-Type": "application/json", "X-CreditBook-Owner": ownerId }, body: JSON.stringify(body) });
       const value: unknown = await response.json();
       if (!voiceRequestIsCurrent(request.current, requestId, ownerId, consentRef.current)) return;
       if (response.status === 401 || response.status === 403 || (value && typeof value === "object" && (value as { code?: unknown }).code === "OWNER_CHANGED")) { onAuthFailure(); return; }
       const parsed = response.ok ? parseVoiceDraftResponse(value, ownerId, requestId) : null;
-      const draft = requestSource === "receipt" && !parsed?.draft.receipt ? null : parsed;
+      const draft = requestSource === "receipt" && !parsed?.draft.receipt ? null : purpose === "category" && (parsed?.draft.entries.length !== 0 || !(parsed?.draft.categoryName === null || typeof parsed?.draft.categoryName === "string" && !categoryNameProblem(parsed.draft.categoryName, []))) ? null : parsed;
       if (!draft) { const code = value && typeof value === "object" ? (value as { code?: unknown }).code : undefined; onMessage(code === "AI_BUDGET_EXHAUSTED" ? "AI limiti tugadi." : code === "AI_BUSY" ? "AI band. Keyinroq urinib ko‘ring." : code === "AI_REQUEST_REPLAY" ? "So‘rov qayta ishlanmoqda. Shu tahlilni qayta yuboring." : "Tahlil natijasi ishonchli emas. Qayta urinib ko‘ring."); return; }
+      setCategoryName(draft.draft.categoryName ?? null);
       setAudio(null); setTranscript(draft.draft.transcript); setClarification(draft.draft.clarification); setDraftSource(requestSource); setCategoryContextLimited(Boolean((draft as VoiceDraftResponse & { categoryContextLimited?: boolean }).categoryContextLimited));
       setImage(null); setReceipt(draft.draft.receipt ?? null);
       const other = categories.find(category => category.name.trim().toLocaleLowerCase("uz") === "boshqa")?.id ?? null;
       setEntries(draft.draft.entries.map((entry, index) => ({ ...entry, id: `${requestId}-${index}`, categoryId: categories.some(category => category.id === entry.categoryId) ? entry.categoryId : other })));
     } catch (error) { if (!controller.signal.aborted) onMessage(error instanceof DOMException && error.name === "AbortError" ? "" : "Tahlilga ulanib bo‘lmadi. Qayta urinib ko‘ring."); }
     finally { if (request.current?.id === requestId) { request.current = null; setAnalysing(false); } }
+  };
+  const confirmCategory = () => {
+    if (disabled || !consentRef.current || recording || startingRecording || analysing || request.current || !categoryName || categoryNameProblem(categoryName, existingCategoryNames)) return;
+    onCategoryConfirm?.(categoryName.trim().replace(/\s+/g, " "));
   };
   const confirm = () => {
     if (!consentRef.current || disabled || recording || startingRecording || analysing || request.current || recorder.current || starting.current) return;
@@ -183,10 +197,10 @@ export function VoiceEntry({ ownerId, disabled, defaultKind, categories, onConfi
   const working = preparingImage || analysing || startingRecording;
   const workingTitle = preparingImage ? "Rasm tayyorlanmoqda" : startingRecording ? "Mikrofon ochilmoqda" : source === "receipt" ? "Chek tahlil qilinmoqda" : "Yozuv tahlil qilinmoqda";
   const workingHint = preparingImage ? "Rasm tahlilga moslanmoqda." : startingRecording ? "Ruxsat so‘ralsa, mikrofonga ruxsat bering." : source === "receipt" ? "Mahsulotlar va summalar alohida kartalarga ajratilmoqda." : "Summa, toifa va sana aniqlanmoqda.";
-  return <section className={styles.panel} aria-label="Ovozli yozuv">
+  return <section className={styles.panel} aria-label={purpose === "category" ? "Ovozli toifa" : "Ovozli yozuv"}>
     <p className={styles.privacy}>Ovoz, matn yoki chek rasmi OpenRouter orqali Google’ga yuboriladi; Google xavfsizlik uchun saqlashi mumkin. CreditBook audio va rasmni saqlamaydi. Rasmda keraksiz shaxsiy ma’lumotlarni yoping.</p>
     <label className={styles.consent}><input type="checkbox" checked={consent} disabled={disabled} onChange={event => changeConsent(event.target.checked)}/> <span>Men ushbu yuborishga roziman.</span></label>
-    <div className={styles.source} role="group" aria-label="Manba">{([ ["audio", "Ovoz"], ["text", "Matn"], ["receipt", "Chek"] ] as const).map(([mode, label]) => <button key={mode} type="button" aria-pressed={source === mode} disabled={disabled || recording || startingRecording || analysing} onClick={() => switchSource(mode)}>{label}</button>)}</div>
+    {purpose !== "category" && !hideSources && <div className={styles.source} role="group" aria-label="Manba">{([ ["audio", "Ovoz"], ["receipt", "Chek"] ] as const).map(([mode, label]) => <button key={mode} type="button" aria-pressed={source === mode} disabled={disabled || recording || startingRecording || analysing} onClick={() => switchSource(mode)}>{label}</button>)}</div>}
     {source === "receipt" && <div className={styles.receipt}>
       <p>Har bir mahsulot alohida yozuv bo‘ladi. Bitta chek: 10 tagacha mahsulot, JPEG/PNG, 10 MBgacha. Faqat tasdiqlasangiz barchasi birga saqlanadi.</p>
       <input ref={imageInput} hidden aria-label="Chek rasmini tanlang" type="file" accept="image/jpeg,image/png" disabled={disabled || !consent || analysing || preparingImage} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void selectImage(file); }}/>
@@ -197,9 +211,12 @@ export function VoiceEntry({ ownerId, disabled, defaultKind, categories, onConfi
       <button type="button" className={styles.chooseImage} disabled={disabled || !consent || analysing || preparingImage} onClick={() => imageInput.current?.click()}>{image ? "Rasmni almashtirish" : "Chek rasmini tanlang"}</button>
       <button type="button" className={styles.confirm} disabled={disabled || !consent || analysing || preparingImage || !image} onClick={() => void analyse()}>{preparingImage ? "Rasm tayyorlanmoqda…" : analysing ? "Chek o‘qilmoqda…" : "Chekni tahlil qilish"}</button>
     </div>}
-    {source !== "receipt" && (source === "audio" ? <><button type="button" className={styles.record} aria-pressed={recording} disabled={disabled || !consent || startingRecording || analysing} onClick={() => void (recording ? stop() : record())}>{recording ? <><Square size={19}/> To‘xtatish va tahlil qilish</> : <><Mic size={19}/> {startingRecording ? "Mikrofon ochilmoqda…" : "30 soniyagacha yozish"}</>}</button><p className={styles.status} role="status">{analysing ? "Tahlil qilinmoqda…" : recording ? "Yozish tugagach avtomatik tahlil qilinadi." : "Yozish tugagach tasdiq kartasi chiqadi. Faqat tasdiqlasangiz saqlanadi."}</p>{audio && !analysing && <button type="button" className={styles.confirm} disabled={disabled || !consent || recording || startingRecording} onClick={() => void analyse()}>Qayta urinish</button>}</> : <><label>Matn<textarea maxLength={VOICE_MAX_TEXT} value={text} disabled={disabled || !consent || analysing} onChange={event => setText(event.target.value)} placeholder="Masalan: bugun oziq-ovqatga 1200 yen sarfladim"/></label><button type="button" className={styles.confirm} disabled={disabled || !consent || analysing || !text.trim()} onClick={() => void analyse()}><WandSparkles size={18}/> {analysing ? "Tahlil qilinmoqda…" : "Tahlil qilish"}</button></>)}
+    {source !== "receipt" && (source === "audio" ? <><button type="button" className={styles.record} aria-pressed={recording} disabled={disabled || !consent || startingRecording || analysing} onClick={() => void (recording ? stop() : record())}>{recording ? <><Square size={19}/> To‘xtatish va tahlil qilish</> : <><Mic size={19}/> {startingRecording ? "Mikrofon ochilmoqda…" : purpose === "category" ? "Toifa nomini aytish" : "Ovoz yozish"}</>}</button><p className={styles.status} role="status">{analysing ? "Tahlil qilinmoqda…" : recording ? "Yozish tugagach avtomatik tahlil qilinadi." : "30 soniyagacha yozish mumkin. Yozish tugagach tasdiq kartasi chiqadi. Faqat tasdiqlasangiz saqlanadi."}</p>{audio && !analysing && <button type="button" className={styles.confirm} disabled={disabled || !consent || recording || startingRecording} onClick={() => void analyse()}>Qayta urinish</button>}</> : <><label>Matn<textarea maxLength={VOICE_MAX_TEXT} value={text} disabled={disabled || !consent || analysing} onChange={event => setText(event.target.value)} placeholder="Masalan: bugun oziq-ovqatga 1200 yen sarfladim"/></label><button type="button" className={styles.confirm} disabled={disabled || !consent || analysing || !text.trim()} onClick={() => void analyse()}><WandSparkles size={18}/> {analysing ? "Tahlil qilinmoqda…" : "Tahlil qilish"}</button></>)}
     {working && <div className={styles.working} role="status" aria-live="polite" aria-atomic="true"><span className={styles.workingIcon}><LoaderCircle size={22} aria-hidden="true"/></span><div><strong>{workingTitle}</strong><p>{workingHint}</p>{analysing && <small>Tayyor bo‘lgach, tasdiqlash kartalari chiqadi.</small>}</div></div>}
-    {clarification && <div className={styles.clarification}><p>Aniqlashtirish kerak: {clarification}</p><button type="button" disabled={disabled || analysing} onClick={acknowledgeClarification}>Tuzatdim</button></div>}
+    {purpose === "category" && (recording || categoryName !== null || clarification) && <button type="button" disabled={disabled || analysing} onClick={() => {releasePrivate();setCategoryName(null);setAudio(null);setTranscript("");setClarification(null);setRecording(false);setStartingRecording(false);}}>Bekor qilish</button>}
+    {purpose === "category" && categoryName !== null && <div className={styles.draft}><h3>Toifani tekshiring</h3><label>Toifa nomi<input maxLength={80} value={categoryName} disabled={disabled || analysing} onChange={event => setCategoryName(event.target.value)}/></label>{categoryNameProblem(categoryName, existingCategoryNames) && <p role="alert">{categoryNameProblem(categoryName, existingCategoryNames)}</p>}<button type="button" className={styles.confirm} disabled={disabled || !consent || recording || analysing || !!categoryNameProblem(categoryName, existingCategoryNames)} onClick={confirmCategory}>Toifani tasdiqlash</button></div>}
+    {clarification && purpose === "category" && <p role="status">{clarification}</p>}
+    {clarification && purpose !== "category" && <div className={styles.clarification}><p>Aniqlashtirish kerak: {clarification}</p><button type="button" disabled={disabled || analysing} onClick={acknowledgeClarification}>Tuzatdim</button></div>}
     {categoryContextLimited && <p className={styles.clarification}>AI toifalarning cheklangan ro‘yxatini ko‘radi. Kerakli toifani qo‘lda tanlashingiz mumkin.</p>}
     {entries.length > 0 && <div className={styles.drafts}><label>Matnni tekshiring<textarea maxLength={VOICE_MAX_TEXT} value={transcript} disabled={disabled} onChange={event => setTranscript(event.target.value)}/></label>{entries.map((entry, index) => <article className={styles.draft} key={entry.id}><h3>{index + 1}-qoralama</h3><div className={styles.fields}><label>Tur<select value={entry.kind} disabled={disabled} onChange={event => changeEntry(entry.id, "kind", event.target.value)}><option value="expense">Chiqim</option><option value="income">Kirim</option></select></label><label>Valyuta<select value={entry.currencyCode ?? ""} disabled={disabled} onChange={event => changeEntry(entry.id, "currencyCode", event.target.value)}><option value="">Noma’lum</option><option value="JPY">JPY</option><option value="USD">USD</option><option value="UZS">UZS</option></select></label></div>{entry.currencyCode && entry.currencyCode !== "JPY" && <p className={styles.warning}>{entry.currencyCode} JPYga avtomatik o‘tkazilmaydi. JPY ni tanlab, summani qo‘lda kiriting.</p>}<label>Summa · JPY<input inputMode="numeric" value={entry.amountMinor ?? ""} disabled={disabled || entry.currencyCode !== "JPY"} onChange={event => changeEntry(entry.id, "amountMinor", event.target.value)}/></label><label>Toifa<select value={entry.categoryId ?? ""} disabled={disabled} onChange={event => changeEntry(entry.id, "categoryId", event.target.value)}><option value="">Toifani tanlang</option>{categories.map(category => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label><label>Sana<input type="date" value={entry.effectiveDate} disabled={disabled} onChange={event => changeEntry(entry.id, "effectiveDate", event.target.value)}/></label><label>Izoh<textarea maxLength={400} value={entry.note} disabled={disabled} onChange={event => changeEntry(entry.id, "note", event.target.value)}/></label></article>)}</div>}
     {draftSource === "receipt" && receipt && <div className={styles.receipt}><label>Chek jami · JPY<input inputMode="numeric" value={receipt.totalMinor ?? ""} disabled={disabled || receipt.currencyCode !== "JPY"} onChange={event => setReceipt({ ...receipt, totalMinor: event.target.value || null })}/></label>{receiptError ? <p role="alert" className={styles.warning}>{receiptError}</p> : <p role="status">Mahsulotlar yig‘indisi chek jamiga mos. Barcha qatorlarni tekshiring.</p>}</div>}

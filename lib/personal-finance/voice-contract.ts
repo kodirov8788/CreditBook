@@ -16,6 +16,8 @@ export type VoiceEntry = Readonly<{
 }>;
 export type VoiceDraft = Readonly<{
   transcript: string;
+  /** Present only for category-name drafts; never a financial write. */
+  categoryName?: string | null;
   entries: readonly VoiceEntry[];
   clarification: string | null;
   receipt?: ReceiptSummary;
@@ -25,6 +27,7 @@ export type VoiceDraftRequest = Readonly<{
   requestId: string;
   consent: typeof VOICE_CONSENT_VERSION;
   defaultKind: "income" | "expense";
+  purpose?: "category";
 }> & (Readonly<{ mode: "text"; text: string }> | Readonly<{ mode: "audio"; audio: string }> | Readonly<{ mode: "receipt"; image: string }>);
 export type VoiceDraftResponse = Readonly<{
   ok: true;
