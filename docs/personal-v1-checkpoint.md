@@ -1,5 +1,71 @@
 # Personal V1 continuation checkpoint
 
+## Latest verified release — 2026-10-25 bug audit
+
+This section supersedes the historical implementation/release state below.
+
+- Scope: user-authorized read-only audit, focused local fixes/tests, and deployment
+  only to `creditbook-personal`. Auth configuration/credentials, existing records,
+  hosted schemas, Supabase, old shop production and QA project were not changed.
+- Baseline: `codex/personal-compact-a-receipt-tax`, HEAD `b20e428b97092d5fb0d6078ac758ad35eddb5480`;
+  same source tree as merged `49db751c6617524ce317961529b393a1c4815ff4`.
+  At audit completion the bug fixes were uncommitted. Follow-up publication is
+  explicitly authorized on `codex/personal-reliability-fixes`, targeting
+  `codex/issue-89-single-book`; merge is outside this follow-up scope.
+  The runtime below is unchanged for the commit-backed redeployment.
+- Verified defects fixed: old Home Screen `/dashboard` launch returned404;
+  missing manifest icons; disabled pinch zoom; cross-tab read owner could remain
+  bound to the previous account; cursor JSON aggregation lacked explicit ordering;
+  provider credential/credit/rate failures were reported as unreliable model output.
+- Runtime files: `app/layout.tsx`, `app/manifest.ts`, `proxy.ts`,
+  `components/personal/neon-wallet.tsx`, `components/personal/voice-entry.tsx`,
+  `lib/ai/voice-provider.ts`, `lib/api/neon-voice.ts`,
+  `lib/data/neon-personal-ledger.ts`, and three `public/icons/*.png` assets.
+  Tests: updated `voice-provider.test.ts`; added `personal-launch.test.ts`,
+  `personal-ledger-order.test.ts`, `neon-voice-errors.test.ts` under `tests/api/`.
+- Verification actually run:729 unit/API tests in43 files passed; TypeScript and
+  lint passed; isolated webpack production build passed; full npm audit0.
+  Build retains known transitive Better Auth peer/deprecation warnings, and local
+  multi-lockfile workspace-root and Vite future-loader warnings; these are not
+  represented as security findings or silently suppressed.
+- Two independent read-only reviewers checked the frontend owner reset and SQL/
+  provider changes. Frozen write intents retain their original owner; generation
+  checks and cancellation remain intact. No blocking issue found in those hunks.
+- Local browser evidence uses the actual components with synthetic Auth/API:
+  A→B without reload, rapid A→B with delayed A snapshot, logout private-data removal,
+  and actionable provider503 without user logout passed. No real Auth/DB/AI calls
+  were made by that fixture. Mobile frames318×548 and388×632, desktop1022×766:
+  no horizontal overflow; voice button within first viewport. Physical iPhone,
+  microphone/audio capture and paid AI analysis were NOT tested this turn.
+- PostgreSQL integration was attempted but not run: installed libpq has no
+  postgres server binary; existing Docker daemon is stopped. No image/dependency
+  was downloaded and no existing DB was started/reset. Pagination proof is the
+  generated-SQL contract test plus review, NOT a fresh1000-row DB acceptance.
+- Deployment: `dpl_CEgT4TCW43vFJcqh9eRGi9cKhc3C`,
+  `https://creditbook-personal-nis8zdvj5-kodirov8788s-projects.vercel.app`,
+  aliased `https://creditbook-personal.vercel.app`.
+  170-file artifact SHA256:
+  `9193d071d2f4a61b7856cddb3523c46d3082b4401431cf51c9db0b3e5f914dab`.
+  Manifest includes source hashes; source-stage drift after build/deploy: none.
+- Live HTTP proof: manifest starts `/personal`;192/512/180 PNGs200 and correct
+  dimensions; old `/dashboard`307→`/personal`, private/no-store; admin and QA gates404.
+  Authenticated wallet and category views loaded; rapid month changes returned to
+  selected October; console error count0. Voice button bottom538 at418×634.
+- Record preservation: visible11 October entries, balance and monthly totals had
+  identical before/after hashes; zero financial saves, zero external AI requests.
+  This is UI/history preservation proof, not a fresh authoritative whole-DB count.
+- Evidence in sibling recovered checkout `qa/security-2026-10-24/`:
+  `bugfix-2026-10-25-manifest.json`, `bugfix-2026-10-25-acceptance.json`,
+  `bugfix-provider-error-local.png`. Evidence contains hashes/counts, no credentials
+  or raw financial histories. Local fixture: sibling `creditbook-bugfix-local-2026-10-25`.
+- Remaining next action: run exact SQL pagination over50/1000+ synthetic rows once
+  an approved disposable local PostgreSQL runtime is available. Review remaining
+  product acceptance separately; no claim that every possible bug is eliminated.
+- Rollback: only this Vercel project can return to preceding deployment
+  `dpl_FqCzEfVPcycPou35C8xphVnTERDr`; no schema or business-data rollback is needed.
+
+## Historical checkpoint
+
 Updated: 2026-10-19 (Asia/Tokyo), G02 publication approved; production readiness review.
 This checkpoint supersedes the earlier G01 pre-commit handoff.
 

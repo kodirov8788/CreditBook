@@ -50,7 +50,7 @@ describe("bounded private voice provider",()=>{
     const warning=vi.spyOn(console,"warn").mockImplementation(()=>{});
     try {
       const fetcher=vi.fn<typeof fetch>(async()=>Response.json({error:"private token"},{status,headers:{"X-Private":"private header"}}));
-      expect(await inferVoice(input,categories,"synthetic-key",AbortSignal.timeout(1000),fetcher)).toEqual({draft:null,cost:null});
+      expect(await inferVoice(input,categories,"synthetic-key",AbortSignal.timeout(1000),fetcher)).toEqual({draft:null,cost:null,failure:status===401||status===403?"AI_PROVIDER_AUTH":status===402?"AI_PROVIDER_BUDGET":status===429?"AI_PROVIDER_BUSY":"AI_UNAVAILABLE"});
       expect(fetcher).toHaveBeenCalledOnce();
       expect(warning.mock.calls).toEqual([["creditbook_voice_upstream_failed",{status}]]);
     } finally { warning.mockRestore(); }
