@@ -65,6 +65,7 @@ export function parseVoiceDraftResponse(value: unknown, ownerId: string, request
 export function voiceFailureMessage(code: unknown): string {
   if (code === "AI_PROVIDER_AUTH" || code === "AI_NOT_CONFIGURED") return "AI xizmati kaliti sozlanmagan yoki muddati tugagan. Qo‘lda kiritish ishlaydi; xizmat sozlamasini tekshirish kerak.";
   if (code === "AI_PROVIDER_BUDGET") return "AI provayderi balansi yoki limiti yetarli emas. Qo‘lda kiritish mumkin.";
+  if (code === "AI_PROVIDER_TIMEOUT") return "Chek yoki ovoz tahlili uzoq davom etdi. Hech qanday yozuv saqlanmadi. Keyinroq urinib ko‘ring yoki qo‘lda kiriting.";
   if (code === "AI_BUDGET_EXHAUSTED") return "AI limiti tugadi. Qo‘lda kiritish mumkin.";
   if (code === "AI_BUSY" || code === "AI_PROVIDER_BUSY") return "AI band. Keyinroq urinib ko‘ring yoki qo‘lda kiriting.";
   if (code === "AI_REQUEST_REPLAY") return "So‘rov qayta ishlanmoqda. Shu tahlilni qayta yuboring.";

@@ -8,6 +8,47 @@ function wav(samples = 16000) {
   const b = Buffer.alloc(44+samples*2); b.write("RIFF"); b.writeUInt32LE(b.length-8,4); b.write("WAVEfmt ",8); b.writeUInt32LE(16,16); b.writeUInt16LE(1,20); b.writeUInt16LE(1,22); b.writeUInt32LE(16000,24); b.writeUInt32LE(32000,28); b.writeUInt16LE(2,32); b.writeUInt16LE(16,34); b.write("data",36); b.writeUInt32LE(samples*2,40); return b;
 }
 describe("bounded private voice provider",()=>{
+  it("preserves caller cancellation without logging or retrying",async()=>{
+    const controller=new AbortController();controller.abort(new DOMException("cancelled","AbortError"));
+    const warning=vi.spyOn(console,"warn").mockImplementation(()=>{});
+    try {
+      const fetcher=vi.fn<typeof fetch>(async()=>{throw controller.signal.reason;});
+      await expect(inferVoice(input,categories,"synthetic-key",controller.signal,fetcher)).rejects.toMatchObject({name:"AbortError"});
+      expect(warning).not.toHaveBeenCalled();expect(fetcher).toHaveBeenCalledOnce();
+    } finally {warning.mockRestore();}
+  });
+  it("allows a slow receipt beyond 25 seconds with the lower input price ceiling",async()=>{
+    vi.useFakeTimers();
+    const timeout=vi.spyOn(AbortSignal,"timeout").mockImplementation(ms=>{const controller=new AbortController();setTimeout(()=>controller.abort(new DOMException("deadline","TimeoutError")),ms);return controller.signal;});
+    try {
+      const value={...draft(),entries:[{...draft().entries[0],taxRatePercent:null}],receipt:{totalMinor:"1200",currencyCode:"JPY",complete:true,taxMinor:null,taxRatePercent:null}};
+      const receipt:VoiceDraftRequest={...input,mode:"receipt",image:"synthetic"};
+      const fetcher=vi.fn<typeof fetch>((_,init)=>new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>resolve(Response.json({usage:{cost:0.001},choices:[{finish_reason:"stop",message:{content:JSON.stringify(value)}}]})),30000);
+        init?.signal?.addEventListener("abort",()=>{clearTimeout(timer);reject(init.signal?.reason);},{once:true});
+      }));
+      const pending=inferVoice(receipt,categories,"synthetic-key",new AbortController().signal,fetcher);
+      await vi.advanceTimersByTimeAsync(30000);
+      expect((await pending).draft?.entries[0].amountMinor).toBe("1200");
+      expect(timeout).toHaveBeenCalledWith(45000);
+      const spec=JSON.parse(String(fetcher.mock.calls[0][1]?.body));
+      expect(spec.provider.max_price).toEqual({prompt:1,completion:7.5});expect(spec.max_tokens).toBe(3000);
+      expect(fetcher).toHaveBeenCalledOnce();
+    } finally {timeout.mockRestore();vi.useRealTimers();}
+  });
+  it.each(["text","receipt"] as const)("bounds %s latency and retains unknown cost without a billable retry",async mode=>{
+    vi.useFakeTimers();
+    const timeout=vi.spyOn(AbortSignal,"timeout").mockImplementation(ms=>{const controller=new AbortController();setTimeout(()=>controller.abort(new DOMException("private upstream detail","TimeoutError")),ms);return controller.signal;});
+    const warning=vi.spyOn(console,"warn").mockImplementation(()=>{});
+    try {
+      const fetcher=vi.fn<typeof fetch>((_,init)=>new Promise((_,reject)=>{init?.signal?.addEventListener("abort",()=>reject(init.signal?.reason),{once:true});}));
+      const request:VoiceDraftRequest=mode==="receipt"?{...input,mode,image:"synthetic"}:input;
+      const pending=inferVoice(request,categories,"synthetic-key",new AbortController().signal,fetcher);
+      await vi.advanceTimersByTimeAsync(mode==="receipt"?45000:25000);
+      expect(await pending).toEqual({draft:null,cost:null,failure:"AI_PROVIDER_TIMEOUT"});
+      expect(fetcher).toHaveBeenCalledOnce();expect(JSON.stringify(warning.mock.calls)).not.toContain("private upstream detail");
+    } finally {timeout.mockRestore();warning.mockRestore();vi.useRealTimers();}
+  });
   it("accepts original text and canonical mono PCM only",()=>{
     expect(validateVoiceRequest(input)).toEqual(input);
     const base={requestId:input.requestId,consent:input.consent,defaultKind:input.defaultKind};
