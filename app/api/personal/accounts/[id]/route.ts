@@ -1,3 +1,4 @@
+import { handleLocalNeonPersonal, usesLocalNeonPersonal } from "@/lib/api/neon-personal";
 import { NextResponse } from "next/server";
 import { getAuthenticatedClient } from "@/lib/api/auth";
 import { getPersonalAccess, personalAccessResponse } from "@/lib/api/personal-access";
@@ -5,6 +6,7 @@ import { badRequest, forbidden, serverError, unauthorized } from "@/lib/api/resp
 import { readJsonBody } from "@/lib/api/json-body";
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  if (usesLocalNeonPersonal()) return handleLocalNeonPersonal(request, "account", (await context.params).id);
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
   const access = await getPersonalAccess(supabase, user);

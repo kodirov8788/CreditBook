@@ -1,7 +1,7 @@
 // Draft domain/transport shapes, not persisted tables or authorization checks.
 export const CURRENCY_SCALES = { UZS: 2, JPY: 0, USD: 2 } as const;
 export type CurrencyCode = keyof typeof CURRENCY_SCALES;
-export const DEFAULT_CURRENCY: CurrencyCode = "UZS";
+export const DEFAULT_CURRENCY: CurrencyCode = "JPY";
 
 export type Money = {
   [C in CurrencyCode]: Readonly<{

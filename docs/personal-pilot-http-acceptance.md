@@ -1,7 +1,18 @@
 # G01 real local Auth / REST / HTTP acceptance
 
 Date: 2026-10-19 (Asia/Tokyo). Local-only, no hosted-project access or release.
-Source baseline: fbc15d1 plus the uncommitted G01 application/database changes.
+Source baseline: fbc15d1 plus G01 changes committed as 42f7ac0, published in
+draft PR #109 stacked on #107. This document records the earlier test run;
+it does not claim the subsequent G02 source was covered by that run.
+
+## Current review restriction
+
+Independent review of #109 found that freshness/name/container-label checks do
+not prove ownership of a caller-supplied local project. Do not rerun this HTTP
+runner until it provisions its own target and verifies ownership before migration
+or destructive cleanup. The historical successful run below does not resolve
+that source-level safety defect. G02 uses separately owned network-none SQL
+containers instead; its new endpoints/UI still require real HTTP acceptance.
 
 ## Result
 
@@ -78,10 +89,10 @@ created only in the disposable CLI project. No real account was enrolled.
 1. Fresh real CLI replay failed on the historical hardening migration's assumed
    public.rls_auto_enable() platform function. The old revoke is now conditional
    on to_regprocedure: hardening remains when present and absent local installs
-   do not need a fabricated stub. This is an uncommitted source compatibility
+   do not need a fabricated stub. This is a source compatibility
    patch to an older migration, not a rewrite of production migration history.
    Both the real CLI absent-function path and the SQL-fixture present-function
-   path were rerun successfully; explicit review remains required before commit.
+   path were rerun successfully before commit 42f7ac0.
 2. Test-only page assertions initially assumed redirect always means HTTP 307
    and dev-mode cache headers mirror release behavior. Streaming redirect can
    be HTTP 200, so redirect content is checked; final cache assertions run against
@@ -120,10 +131,10 @@ no existing service uses these ports. Then from the actual repo run:
 
     node scripts/test-personal-supabase-http.mjs /private/tmp/creditbook-g01-supabase.<random>
 
-The runner refuses non-local/linked/non-fresh targets. After an attempted run
-that passed the fresh-target guards, it cleans only that test project on success
-or failure; start a fresh empty instance before retrying. Never substitute the
-production project/DSN or reuse an existing database.
+Historical behavior: the runner refuses non-local/linked/non-fresh targets, but
+those guards do not prove target ownership. The cleanup uses --no-backup after
+freshness checks. This is an unresolved review blocker, not a safe repeatability
+guarantee. Do not execute the reproduction command above until it is corrected.
 
 Evidence log: /private/tmp/creditbook-g01-real-http-test.log (PASS labels only).
 

@@ -1,3 +1,4 @@
+import { handleLocalNeonPersonal, usesLocalNeonPersonal } from "@/lib/api/neon-personal";
 import { NextResponse } from "next/server";
 import { getAuthenticatedClient } from "@/lib/api/auth";
 import { getPersonalAccess, personalAccessResponse } from "@/lib/api/personal-access";
@@ -8,6 +9,7 @@ export const dynamic = "force-dynamic";
 const keyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function GET(request: Request) {
+  if (usesLocalNeonPersonal()) return handleLocalNeonPersonal(request, "accounts");
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
   const access = await getPersonalAccess(supabase, user);
@@ -21,6 +23,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (usesLocalNeonPersonal()) return handleLocalNeonPersonal(request, "accounts");
   const { supabase, user } = await getAuthenticatedClient(request);
   if (!supabase || !user) return unauthorized();
   const access = await getPersonalAccess(supabase, user);
@@ -35,6 +38,12 @@ export async function POST(request: Request) {
   const { data, error } = await supabase.rpc("create_personal_account", { p_command: input.command, p_client_key: input.clientKey });
   if (error) {
     if (error.code === "42501") return forbidden();
+    if (error.code === "PT409") {
+      const legacy = error.message === "LEGACY_SETUP_REQUIRED";
+      return NextResponse.json({ code: legacy ? "LEGACY_SETUP_REQUIRED" : "BOOK_EXISTS",
+        error: legacy ? "Eski hisoblar bor. Alohida sozlash kerak." : "Shaxsiy hisob allaqachon ochilgan." },
+      { status: 409, headers: { "Cache-Control": "private, no-store" } });
+    }
     if (error.code === "22023") return NextResponse.json({ code: "22023", error: "Nom, summa, valyuta va sanani tekshiring." }, { status: 400 });
     if (error.code === "23505") return NextResponse.json({ error: "Bu so‘rov avval boshqa ma’lumot bilan yuborilgan." }, { status: 409 });
     return serverError();

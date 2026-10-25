@@ -2,7 +2,7 @@
 /* Uzbek Latin text intentionally uses apostrophes in visible labels. */
 /* eslint-disable react/no-unescaped-entities */
 
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -28,6 +28,8 @@ import { getCustomerStatus } from "@/lib/customer-status";
 import type { DashboardCustomer, DashboardStats } from "@/lib/types";
 import ActivityFeed from "@/components/activity-feed";
 import ShopSwitcher from "@/components/shop-switcher";
+import { refreshDashboardDebts } from "@/lib/dashboard-debt-refresh";
+import { createReportLoader, reportMatchesRange, type ReportLoadState } from "@/lib/report-loader";
 
 const money = new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 0 });
 const dateFormatter = new Intl.DateTimeFormat("uz-UZ", { month: "short", day: "numeric" });
@@ -108,6 +110,8 @@ function initials(value: string) {
 
 export default function Dashboard({ initialCustomers, initialStats, initialActivities, userEmail, shopName = "Mahalla do'koni", liveMode, canManageMembers = false, initialError = "", initialView = "dashboard", initialCustomerId }: { initialCustomers: DashboardCustomer[]; initialStats: DashboardStats; initialActivities: ActivityItem[]; userEmail: string | null; shopName?: string; liveMode: boolean; canManageMembers?: boolean; initialError?: string; initialView?: DashboardView; initialCustomerId?: string }) {
   const [customers, setCustomers] = useState(initialCustomers);
+  const [debtRefreshError, setDebtRefreshError] = useState("");
+  const debtRefreshSequence = useRef(0);
   const [stats, setStats] = useState(initialStats);
   const [activities, setActivities] = useState(initialActivities);
   const [search, setSearch] = useState("");
@@ -122,9 +126,9 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
   const [reminderError, setReminderError] = useState("");
   const [reminderForm, setReminderForm] = useState({ customerId: "", scheduledFor: "", message: "", channel: "manual" });
   const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
-  const [report, setReport] = useState<ReportData | null>(null);
-  const [reportLoading, setReportLoading] = useState(false);
-  const [reportError, setReportError] = useState("");
+  const [{report, loading: reportLoading, error: reportError}, setReportState] = useState<ReportLoadState>({report: null, loading: false, error: ""});
+  const reportLoader = useRef<ReturnType<typeof createReportLoader> | null>(null);
+  if (reportLoader.current === null) reportLoader.current = createReportLoader(setReportState);
   const [reportRange, setReportRange] = useState({ from: "", to: "" });
   const [expenseForm, setExpenseForm] = useState({ category: "", amount: "", spentAt: "", vendor: "", note: "" });
   const [expenseError, setExpenseError] = useState("");
@@ -200,23 +204,10 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     if (response.ok && payload?.activities) setActivities(payload.activities);
   }, [liveMode]);
 
-  const loadReport = useCallback(async (range: { from: string; to: string }) => {
-    setReportLoading(true);
-    setReportError("");
-    if (!liveMode) {
-      setReportError("Hisobot uchun Supabase ulanishi kerak.");
-      setReportLoading(false);
-      return;
-    }
-    const params = new URLSearchParams();
-    if (range.from) params.set("from", range.from);
-    if (range.to) params.set("to", range.to);
-    const response = await fetch(`/api/reports?${params.toString()}`);
-    const payload = await response.json().catch(() => null) as { report?: ReportData; error?: string } | null;
-    if (!response.ok || !payload?.report) setReportError(payload?.error || "Hisobot olinmadi.");
-    else setReport(payload.report);
-    setReportLoading(false);
-  }, [liveMode]);
+  useEffect(() => () => reportLoader.current?.cancel(), []);
+  useEffect(() => { if (moreView !== "reports") reportLoader.current?.cancel(); }, [moreView]);
+
+  const loadReport = useCallback((range: { from: string; to: string }) => reportLoader.current?.load(range, liveMode), [liveMode]);
 
   const navigateToView = useCallback((view: DashboardView) => {
     setCurrentView(view);
@@ -407,19 +398,13 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
         return;
       }
 
-      const nextBalance = Math.max(historyCustomer.balance + (transaction.type === "payment" ? transaction.amount : -transaction.amount), 0);
-      const nextStatus = getCustomerStatus(nextBalance, historyCustomer.dueDate);
-      setCustomers((current) => current.map((item) => item.id === historyCustomer.id ? { ...item, balance: nextBalance, status: nextStatus } : item));
-      setStats((current) => ({
-        ...current,
-        totalOutstanding: Math.max(current.totalOutstanding + (transaction.type === "payment" ? transaction.amount : -transaction.amount), 0),
-        overdueAmount: Math.max(current.overdueAmount + (nextStatus === "overdue" ? nextBalance : 0) - (historyCustomer.status === "overdue" ? historyCustomer.balance : 0), 0),
-        activeCustomers: current.activeCustomers + (historyCustomer.balance <= 0 && nextBalance > 0 ? 1 : historyCustomer.balance > 0 && nextBalance <= 0 ? -1 : 0),
-        collectedThisMonth: transaction.type === "payment" && transaction.occurredAt.slice(0, 7) === new Date().toISOString().slice(0, 7) ? Math.max(current.collectedThisMonth - transaction.amount, 0) : current.collectedThisMonth,
-      }));
+      // A history amount alone cannot describe the financial effect: its debt
+      // may already be cancelled or partly paid. Only apply the DB projection.
       setNotice({ tone: "success", text: `${actionLabel[0].toUpperCase()}${actionLabel.slice(1)} bekor qilindi.` });
       void refreshActivities();
-      await loadCustomerHistory({ ...historyCustomer, balance: nextBalance, status: nextStatus });
+      const projection = await refreshDebtDates();
+      const updated = projection?.summary.find(row => row.id === historyCustomer.id);
+      await loadCustomerHistory(updated ? {...historyCustomer, ...updated} : historyCustomer);
     } catch {
       setHistoryError("Yozuvni bekor qilib bo'lmadi. Qayta urinib ko'ring.");
     } finally {
@@ -622,17 +607,39 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
     return response.ok ? null : payload?.error || "Qarz yozilmadi. Qayta urinib ko'ring.";
   }
 
+  async function refreshDebtDates() {
+    if (!liveMode) return;
+    const sequence = ++debtRefreshSequence.current;
+    try {
+      const projection = await refreshDashboardDebts();
+      if (sequence !== debtRefreshSequence.current) return;
+      const byId = new Map(projection.summary.map(row => [row.id, row]));
+      setCustomers(current => current.map(customer => {
+        const row = byId.get(customer.id);
+        return row ? {...customer, balance: row.balance, dueDate: row.dueDate, status: row.status, lastPayment: row.lastPayment} : customer;
+      }));
+      setStats(current => ({...current, totalOutstanding: projection.totalOutstanding, overdueAmount: projection.overdueAmount, activeCustomers: projection.activeCustomers, collectedThisMonth: projection.collectedThisMonth}));
+      setDebtRefreshError("");
+      return projection;
+    } catch {
+      if (sequence === debtRefreshSequence.current) setDebtRefreshError("Amal saqlandi, lekin qoldiq va muddatlar yangilanmadi. Amalni takror yubormang; ro‘yxatni yangilang.");
+    }
+  }
+
   function applyCredit(customer: DashboardCustomer, amount: number, dueDate: string | null) {
     const nextBalance = customer.balance + amount;
-    const nextStatus = getCustomerStatus(nextBalance, dueDate ?? customer.dueDate);
-    setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, balance: nextBalance, dueDate: dueDate || item.dueDate, status: nextStatus } : item));
+    const nextDueDate = customer.balance > 0 && customer.dueDate
+      ? dueDate && dueDate < customer.dueDate ? dueDate : customer.dueDate
+      : dueDate;
+    const nextStatus = getCustomerStatus(nextBalance, nextDueDate);
+    setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, balance: nextBalance, dueDate: nextDueDate, status: nextStatus } : item));
     setStats((current) => ({ ...current, totalOutstanding: current.totalOutstanding + amount, overdueAmount: current.overdueAmount + (nextStatus === "overdue" ? amount : 0), activeCustomers: current.activeCustomers + (customer.balance <= 0 ? 1 : 0) }));
   }
 
   function applyPayment(customer: DashboardCustomer, amount: number) {
     const nextBalance = Math.max(customer.balance - amount, 0);
     const nextStatus = getCustomerStatus(nextBalance, customer.dueDate);
-    setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, balance: nextBalance, status: nextStatus, lastPayment: new Date().toISOString() } : item));
+    setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, balance: nextBalance, dueDate: nextBalance > 0 ? item.dueDate : null, status: nextStatus, lastPayment: new Date().toISOString() } : item));
     setStats((current) => ({ ...current, totalOutstanding: Math.max(current.totalOutstanding - amount, 0), overdueAmount: Math.max(current.overdueAmount - (customer.status === "overdue" ? amount : 0), 0), collectedThisMonth: current.collectedThisMonth + amount, activeCustomers: nextBalance <= 0 ? Math.max(current.activeCustomers - 1, 0) : current.activeCustomers }));
   }
 
@@ -693,6 +700,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
         setNotice({ tone: "success", text: `${formatMoney(amount)} to'lov saqlandi.` });
       }
 
+      if (type === "credit" || type === "payment") await refreshDebtDates();
       closeQuickAction();
     } finally {
       setSaving(false);
@@ -758,6 +766,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
         void refreshActivities();
         setNotice({ tone: "success", text: `${formatMoney(amount)} to'lov saqlandi.` });
       }
+      await refreshDebtDates();
       closeEntry();
     } finally {
       setSaving(false);
@@ -801,6 +810,7 @@ export default function Dashboard({ initialCustomers, initialStats, initialActiv
           </section>}
 
           {notice && <div className={`notice ${notice.tone}`} role="status"><Check size={17} /><span>{notice.text}</span><button className="notice-close" onClick={() => setNotice(null)} aria-label="Xabarni yopish"><X size={16} /></button></div>}
+          {debtRefreshError && <div className="notice info" role="alert"><span>{debtRefreshError}</span><button className="text-button" onClick={() => void refreshDebtDates()}>Ro‘yxatni yangilash</button></div>}
 
           {currentView === "dashboard" && <section className="stats-grid" aria-label="Umumiy qarz holati">
             <StatCard label="Jami qoldiq" value={formatMoney(stats.totalOutstanding)} icon={<WalletCards size={17} />} foot="Faol qarzlar" />
@@ -878,6 +888,8 @@ function TransactionRow({ transaction, onReverse, reversing = false }: { transac
 }
 
 function ReportPanel({ report, reportLoading, reportError, reportRange, setReportRange, expenseForm, setExpenseForm, expenseError, expenseSaving, onRefresh, onSaveExpense, onVoidExpense }: { report: ReportData | null; reportLoading: boolean; reportError: string; reportRange: { from: string; to: string }; setReportRange: Dispatch<SetStateAction<{ from: string; to: string }>>; expenseForm: { category: string; amount: string; spentAt: string; vendor: string; note: string }; setExpenseForm: Dispatch<SetStateAction<{ category: string; amount: string; spentAt: string; vendor: string; note: string }>>; expenseError: string; expenseSaving: boolean; onRefresh: () => void; onSaveExpense: (event: FormEvent<HTMLFormElement>) => void; onVoidExpense: (id: string) => void }) {
+  // The range can render before its loading effect runs: never show old totals.
+  if (!reportMatchesRange(report, reportRange)) report = null;
   const maxBar = Math.max(...(report?.monthly ?? []).flatMap((item) => [item.collected, item.expenses]), 1);
   return <>
     <div className="report-filters"><div className="field"><label htmlFor="report-from">Boshlanish</label><input id="report-from" type="date" value={reportRange.from} onChange={(event) => setReportRange({ ...reportRange, from: event.target.value })} /></div><div className="field"><label htmlFor="report-to">Tugash</label><input id="report-to" type="date" value={reportRange.to} onChange={(event) => setReportRange({ ...reportRange, to: event.target.value })} /></div><button className="button button-secondary" onClick={onRefresh} disabled={reportLoading}>{reportLoading ? "Yuklanmoqda..." : "Ko'rsatish"}</button></div>

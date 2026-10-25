@@ -1,4 +1,5 @@
-import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
+import type { DataClient } from "@/lib/data/client";
 import { NextResponse } from "next/server";
 
 export type PersonalAccess = "allowed" | "denied" | "unavailable";
@@ -6,7 +7,7 @@ export type PersonalAccess = "allowed" | "denied" | "unavailable";
 // The database resolves the verified session UUID and current account status.
 // Never infer pilot membership from email, user_metadata or a client argument.
 export async function getPersonalAccess(
-  supabase: SupabaseClient,
+  supabase: DataClient,
   user: Pick<User, "id" | "is_anonymous">,
 ): Promise<PersonalAccess> {
   if (!user.id || user.is_anonymous) return "denied";

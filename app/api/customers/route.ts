@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { badRequest, serverError, unauthorized } from "@/lib/api/response";
 import { getAuthenticatedClient, requireShopPermission } from "@/lib/api/auth";
+import { createSupabaseCustomerRepository, parseCustomerDetails } from "@/lib/data/customers";
 
 export async function GET(request: Request) {
   const { supabase, user } = await getAuthenticatedClient(request);
@@ -24,23 +25,17 @@ export async function POST(request: Request) {
   const access = await requireShopPermission(supabase, user, "customer.create");
   if (!access.ok) return access.response;
 
-  const body = await request.json().catch(() => null) as { name?: string; phone?: string; address?: string; notes?: string; amount?: number; dueDate?: string } | null;
-  const name = body?.name?.trim();
-  if (!name || name.length < 2) return badRequest("Mijoz ismini kiriting.");
-  const amount = body?.amount ?? 0;
-  if (!Number.isFinite(amount) || amount < 0) return badRequest("Qarz summasini tekshiring.");
-
-  const { data, error } = await supabase.rpc("create_customer_with_opening_debt", {
-    p_name: name,
-    p_phone: body?.phone?.trim() || null,
-    p_address: body?.address?.trim() || null,
-    p_notes: body?.notes?.trim() || null,
-    p_amount: amount,
-    p_due_date: body?.dueDate || null,
-  });
-  const customer = Array.isArray(data) ? data[0] : data;
-
-  if (error || !customer) return serverError();
-
-  return NextResponse.json({ customer }, { status: 201 });
+  const body: unknown = await request.json().catch(() => null);
+  const details = parseCustomerDetails(body);
+  if (!details) return badRequest("Mijoz ismini kiriting.");
+  const input = body as Record<string, unknown>;
+  const amount = input.amount ?? 0;
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) return badRequest("Qarz summasini tekshiring.");
+  if (input.dueDate != null && typeof input.dueDate !== "string") return badRequest("Sanani tekshiring.");
+  try {
+    const customer = await createSupabaseCustomerRepository(supabase, access.shopId).create({
+      ...details, amount, dueDate: typeof input.dueDate === "string" ? input.dueDate || null : null,
+    });
+    return NextResponse.json({ customer }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
+  } catch { return serverError(); }
 }
